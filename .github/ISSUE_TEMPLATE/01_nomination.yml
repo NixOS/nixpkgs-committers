@@ -1,0 +1,25 @@
+name: Committer Nomination
+description: Nominate a user for Nixpkgs commit access.
+title: "[Nomination]: "
+labels: ["nomination"]
+assignees:
+  - @NixOS/commit-bit-delegation
+body:
+  - type: input
+    id: user
+    attributes:
+      label: GitHub user name
+      placeholder: octocat
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason
+      description: Why I are you nominating this person? Please include links to their relevant PR and reviewing activity.
+    validations:
+      required: true
