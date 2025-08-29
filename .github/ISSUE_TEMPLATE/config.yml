@@ -1,0 +1,7 @@
+contact_links:
+  - name: Contact the Committer Delegation Team via group message on Discourse
+    url: https://discourse.nixos.org/g/nixpkgs-nominations
+    about: For private inquiries and suggestions.
+  - name: Contact the individual Committer Delegation Team members
+    url: https://github.com/NixOS/org/blob/main/doc/nixpkgs-committers.md#team
+    about: For private inquiries and suggestions.
