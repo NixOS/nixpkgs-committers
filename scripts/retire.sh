@@ -26,7 +26,7 @@ effect() {
 }
 
 usage() {
-  log "Usage: $0 ORG ACTIVITY_REPO MEMBER_REPO DIR PR_CUTOFF_DATE"
+  log "Usage: $0 ORG ACTIVITY_REPO MEMBER_REPO DIR NOTICE_CUTOFF"
   exit 1
 }
 
@@ -34,10 +34,11 @@ ORG=${1:-$(usage)}
 ACTIVITY_REPO=${2:-$(usage)}
 MEMBER_REPO=${3:-$(usage)}
 DIR=${4:-$(usage)}
-CUTOFF_DATE=${5:-$(usage)}
+NOTICE_CUTOFF=${5:-$(usage)}
 
 mainBranch=$(git branch --show-current)
-cutoffEpoch=$(date --date="$CUTOFF_DATE" +%s)
+newCutoff=$(date --date="1 year ago" +%s)
+noticeCutoff=$(date --date="$NOTICE_CUTOFF" +%s)
 
 if [[ -z "${PROD:-}" ]]; then
   tmp=$(git rev-parse --show-toplevel)/.tmp
@@ -52,6 +53,15 @@ fi
 mkdir -p "$DIR"
 cd "$DIR"
 for login in *; do
+
+  # Don't remove people that have been added recently
+  if [[ -s "$login" ]]; then
+    epochAdded=$(date --date="$(<"$login")" +%s)
+    if (( newCutoff < epochAdded )); then
+      continue
+    fi
+  fi
+
   trace gh api -X GET /repos/"$ORG"/"$ACTIVITY_REPO"/activity \
     -f time_period=year \
     -f actor="$login" \
@@ -75,7 +85,7 @@ for login in *; do
     # If there is a PR already
     prNumber=$(jq .number <<< "$prInfo")
     epochCreatedAt=$(date --date="$(jq -r .created_at <<< "$prInfo")" +%s)
-    if jq -e .draft <<< "$prInfo" >/dev/null && (( epochCreatedAt < cutoffEpoch )); then
+    if jq -e .draft <<< "$prInfo" >/dev/null && (( epochCreatedAt < noticeCutoff )); then
       log "$login has a retirement PR due, unmarking PR as draft and commenting with next steps"
       effect gh pr ready --repo "$ORG/$MEMBER_REPO" "$prNumber"
       {

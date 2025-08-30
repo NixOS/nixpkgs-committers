@@ -25,6 +25,11 @@ Once you have the above setup (or got @infinisil to add yourself to his), you ha
   To cover all code branches it's recommended to create, push to and delete a branch.
   You can do this from the web interface.
 - Get the GitHub CLI available (`pkgs.github-cli`) and authenticate it using `gh auth login`
+- A local Git clone of this repository with the `origin` remote set to the test repository:
+  ```bash
+  git remote add upstream git@github.com:NixOS/nixpkgs-committers.git
+  git remote set-url origin git@github.com:infinisil-test-org/nixpkgs-committers.git
+  ```
 
 ## Testing `sync.sh`
 
@@ -42,17 +47,18 @@ This script has external effects and as such needs a bit more care when testing.
 
 ### Setup (important!)
 
-To avoid other users getting pings, ensure that the `members` directory contains only your own user, then commit and push it for testing:
+To avoid other users getting pings, ensure that the `members` directory contains only a simulated new user and your own user (simulated to have been added over a year ago), then commit and push it for testing:
 
 ```bash
 me=$(gh api /user --jq .login)
-git switch -c "test-$me"
+git switch -C "test-$me"
 rm -rf members
 mkdir members
-touch "members/$me"
+date +%F > "members/github"
+date --date="1 year ago 1 day ago" +%F > "members/$me"
 git add members
 git commit -m testing
-git push -u git@github.com:infinisil-test-org/nixpkgs-committers HEAD
+git push -f -u origin HEAD
 ```
 
 ### Test sequence
@@ -71,7 +77,7 @@ The following sequence tests all code paths:
    scripts/retire.sh infinisil-test-org empty nixpkgs-committers members 'yesterday 1 month ago'
    ```
 
-   Check that it would create a PR before running it again with `PROD=1` to actually do it:
+   Check that it would only create a PR for your own user and not the "github" user before running it again with `PROD=1` to actually do it:
 
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members 'yesterday 1 month ago'
