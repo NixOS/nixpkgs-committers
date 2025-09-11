@@ -127,6 +127,10 @@ for login in *; do
         echo "This is an automated PR to retire @$login as a Nixpkgs committers due to not using their commit access for 1 year."
         echo ""
         echo "Make a comment with your motivation to keep commit access, otherwise this PR will be merged and implemented in 1 month."
+        echo ""
+        echo "> [!NOTE]"
+        echo -n "> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs."
+        echo ' It is only needed for things that require `write` permissions to Nixpkgs, such as merging PRs.'
       } | effect gh api \
         --method POST \
         /repos/"$ORG"/"$MEMBER_REPO"/pulls \
