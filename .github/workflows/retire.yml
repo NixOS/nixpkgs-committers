@@ -34,6 +34,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+          # Fetch full history to determine when committers were added
+          fetch-depth: 0
       - name: Run script
         # One month plus a bit of leeway
         run: scripts/retire.sh NixOS nixpkgs nixpkgs-committers members "yesterday 1 month ago"

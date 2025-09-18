@@ -37,8 +37,30 @@ DIR=${4:-$(usage)}
 NOTICE_CUTOFF=${5:-$(usage)}
 
 mainBranch=$(git branch --show-current)
-newCutoff=$(date --date="1 year ago" +%s)
 noticeCutoff=$(date --date="$NOTICE_CUTOFF" +%s)
+
+# People that received the commit bit after this date won't be retired
+newCutoff=$(date --date="1 year ago" +%s)
+
+# We need to know when people received their commit bit to avoid retiring them within the first year.
+# For now this is done either with the git creation date of the file, or its contents:
+#
+# | commit bit reception date  | file creation date | file contents  |
+# | -------------------------- | ------------------ | -------------- |
+# | A)         -∞ - 2024-10-06 | 2025-07-08         | empty          |
+# | B) 2024-10-07 - 2025-04-22 | 2025-07-08         | reception date |
+# | C) 2025-08-13 - ∞          | reception date     | empty          |
+#
+# After 2026-04-23 (one year after C started), the file creation date
+# for all first-year committers will match the reception date,
+# while everybody else will have been a committer for more than one year.
+# This means the code can then be simplified to just
+# check if the file creation date is in the last year.
+#
+# For now however, the code needs to check if the file creation date
+# is before 2025-07-09 to distinguish between periods A and C,
+# so we hardcode that date for the code to use.
+createdOnReceptionEpoch=$(date --date=2025-07-09 +%s)
 
 if [[ -z "${PROD:-}" ]]; then
   tmp=$(git rev-parse --show-toplevel)/.tmp
@@ -54,12 +76,30 @@ mkdir -p "$DIR"
 cd "$DIR"
 for login in *; do
 
-  # Don't remove people that have been added recently
-  if [[ -s "$login" ]]; then
-    epochAdded=$(date --date="$(<"$login")" +%s)
-    if (( newCutoff < epochAdded )); then
-      continue
+  # Figure out when this person received the commit bit
+  # Get the unix epoch of the first commit that touched this file
+  # --first-parent is important to get the time of when the main branch was changed
+  fileCommitEpoch=$(git log --reverse --first-parent --format=%cd --date=unix -- "$login" | head -1)
+  if (( fileCommitEpoch < createdOnReceptionEpoch )); then
+    # If it was created before creation actually matched the reception date
+    # This branch can be removed after 2026-04-23
+
+    if [[ -s "$login" ]]; then
+      # If the file is non-empty it indicates an explicit reception date
+      receptionEpoch=$(date --date="$(<"$login")" +%s)
+    else
+      # Otherwise they received the commit bit more than a year ago (start of unix epoch, 1970)
+      receptionEpoch=0
     fi
+  else
+    # Otherwise creation matches reception
+    receptionEpoch=$fileCommitEpoch
+  fi
+
+  # If the commit bit was received after the cutoff date, don't retire in any case
+  if (( newCutoff < receptionEpoch )); then
+    log "$login became a committer less than 1 year ago, skipping retirement check"
+    continue
   fi
 
   trace gh api -X GET /repos/"$ORG"/"$ACTIVITY_REPO"/activity \

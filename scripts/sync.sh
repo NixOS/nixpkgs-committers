@@ -17,8 +17,7 @@ gh api /orgs/"$ORG"/teams/"$TEAM"/members --paginate --jq '.[].login' |
     if [[ -f "$DIR/$login" ]]; then
       mv "$DIR/$login" "$DIR.new"
     else
-      # Keep track of when the user was added
-      date +%F > "$DIR.new/$login"
+      touch "$DIR.new/$login"
     fi
   done
 
