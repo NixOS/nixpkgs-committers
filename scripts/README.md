@@ -41,7 +41,41 @@ scripts/sync.sh infinisil-test-org actors members-test
 
 Check that it synchronises the files in the `members-test` directory with the team members of the `actors` team.
 
-## `retire.sh`
+## Testing `nomination.sh`
+
+This script does not depend on the current repository, but has some external effects.
+For testing, we'll use [PR #33](https://github.com/infinisil-test-org/nixpkgs-committers/pull/33) and [issue #30](https://github.com/infinisil-test-org/nixpkgs-committers/issues/30).
+
+To test:
+1. Delete all labels of the PR and reset the title:
+   ```bash
+   gh api --method DELETE /repos/infinisil-test-org/nixpkgs-committers/issues/33/labels
+   gh api --method PATCH /repos/infinisil-test-org/nixpkgs-committers/pulls/33 -f title="A non-conforming title"
+   ```
+1. Run the script while simulating that a non-nomination PR was opened:
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "removed members/infinisil"
+   ```
+
+   Ensure that it exits with 0 and wouldn't run any effects.
+1. Run the script while simulating that multiple users were nominated together:
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "removed members/foo"$'\n'"added members/bar"
+   ```
+
+   Ensure that it exits with non-0 and wouldn't run any effects.
+1. Run the script simulating a successful nomination
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "added members/infinisil"
+   ```
+
+   Ensure that it exits with 0 and would run effects to label the PR, change the title and post a comment in the issue.
+1. Rerun with effects
+   ```bash
+   PROD=1 scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "added members/infinisil"
+   ```
+
+## Testing `retire.sh`
 
 This script has external effects and as such needs a bit more care when testing.
 
