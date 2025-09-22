@@ -76,7 +76,7 @@ The following sequence tests all code paths:
    ```
 
    Check that no PR would be opened.
-2. Run the script with the `empty` repo argument to simulate CI running with inactive users:
+1. Run the script with the `empty` repo argument to simulate CI running with inactive users:
 
    ```bash
    scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now
@@ -90,27 +90,27 @@ The following sequence tests all code paths:
 
    Check that it created the PR appropriately, including assigning the "retirement" label.
    You can undo this step by closing the PR.
-3. Run it again to simulate CI running again later:
+1. Run it again to simulate CI running again later:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now
    ```
    Check that no other PR is opened.
-4. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
+1. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now now
    ```
    Check that it undrafted the previous PR and posted an appropriate comment.
-5. Run it again to simulate CI running again later:
+1. Run it again to simulate CI running again later:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now now
    ```
    Check that no other PR is opened.
-6. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
+1. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org active nixpkgs-committers members-test now now
    ```
    Check that it gets undrafted with a comment listing the new activity.
-8. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
+1. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now '1 day ago'
    ```
