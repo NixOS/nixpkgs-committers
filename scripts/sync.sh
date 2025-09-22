@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+source "$(dirname -- "${BASH_SOURCE[0]}")"/common.sh
 
 usage() {
-  echo >&2 "Usage: $0 ORG TEAM DIR"
+  log "Usage: $0 ORG TEAM DIR"
   exit 1
 }
 
