@@ -1,0 +1,36 @@
+name: nomination
+
+on:
+  pull_request_target:
+    types: [edited, opened, synchronize, reopened]
+
+# We don't need to use the GitHub App for this workflow,
+# because it's all localised to this repo
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  process:
+    name: Check
+    runs-on: ubuntu-latest
+    if: ${{ ! contains(github.event.pull_request.labels.*.name, 'nomination') && github.event.pull_request.head.ref != 'create-pull-request/sync' }}
+    steps:
+      - name: Fetch source
+        uses: actions/checkout@v4
+      - name: Process nomination
+        run: |
+          set -o pipefail
+          gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | "\(.status) \(.filename)"' \
+            | scripts/nomination.sh members "$REPOSITORY" "$PR_NUMBER" "$ANNOUNCEMENT_ISSUE_NUMBER"
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ANNOUNCEMENT_ISSUE_NUMBER: "${{
+              github.repository_owner == 'NixOS' && 35 ||
+              github.repository_owner == 'infinisil-test-org' && 30 ||
+              'NO_ISSUE_NUMBER'
+            }}"
+          GH_TOKEN: ${{ github.token }}
+          PROD: "1"
