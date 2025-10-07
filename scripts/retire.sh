@@ -26,7 +26,7 @@ effect() {
 }
 
 usage() {
-  log "Usage: $0 ORG ACTIVITY_REPO MEMBER_REPO DIR NOTICE_CUTOFF"
+  log "Usage: $0 ORG ACTIVITY_REPO MEMBER_REPO DIR NOTICE_CUTOFF CLOSE_CUTOFF"
   exit 1
 }
 
@@ -35,12 +35,15 @@ ACTIVITY_REPO=${2:-$(usage)}
 MEMBER_REPO=${3:-$(usage)}
 DIR=${4:-$(usage)}
 NOTICE_CUTOFF=${5:-$(usage)}
+CLOSE_CUTOFF=${6:-$(usage)}
 
 mainBranch=$(git branch --show-current)
 noticeCutoff=$(date --date="$NOTICE_CUTOFF" +%s)
 
 # People that received the commit bit after this date won't be retired
 newCutoff=$(date --date="1 year ago" +%s)
+# Users whose retirement PRs were closed after this date won't be retired
+closeCutoff=$(date --date="$CLOSE_CUTOFF" +%s)
 
 # We need to know when people received their commit bit to avoid retiring them within the first year.
 # For now this is done either with the git creation date of the file, or its contents:
@@ -96,6 +99,23 @@ for login in *; do
     receptionEpoch=$fileCommitEpoch
   fi
 
+  # Latest retirement PR, whether draft, open or closed
+  branchName=retire-$login
+  prInfo=$(trace gh api -X GET /repos/"$ORG"/"$MEMBER_REPO"/pulls \
+    -f state=all \
+    -f head="$ORG":"$branchName" \
+    --jq '.[0]')
+  if [[ -n "$prInfo" ]]; then
+    prState=$(jq -r .state <<< "$prInfo")
+  else
+    prState=none
+  fi
+
+  if [[ "$prState" == closed ]] && resetEpoch=$(jq '.closed_at | fromdateiso8601' <<< "$prInfo") && (( closeCutoff < resetEpoch )); then
+    log "$login had a retirement PR that was closed recently, skipping retirement check"
+    continue
+  fi
+
   # If the commit bit was received after the cutoff date, don't retire in any case
   if (( newCutoff < receptionEpoch )); then
     log "$login became a committer less than 1 year ago, skipping retirement check"
@@ -119,12 +139,10 @@ for login in *; do
     > "$tmp/$login"
   activityCount=$(wc -l <"$tmp/$login")
 
-  branchName=retire-$login
-  prInfo=$(trace gh api -X GET /repos/"$ORG"/"$MEMBER_REPO"/pulls -f head="$ORG":"$branchName" --jq '.[0]')
-  if [[ -n "$prInfo" ]]; then
-    # If there is a PR already
+  if [[ "$prState" == open ]]; then
+    # If there is an open PR already
     prNumber=$(jq .number <<< "$prInfo")
-    epochCreatedAt=$(date --date="$(jq -r .created_at <<< "$prInfo")" +%s)
+    epochCreatedAt=$(jq '.created_at | fromdateiso8601' <<< "$prInfo")
     if jq -e .draft <<< "$prInfo" >/dev/null && (( epochCreatedAt < noticeCutoff )); then
       log "$login has a retirement PR due, unmarking PR as draft and commenting with next steps"
       effect gh pr ready --repo "$ORG/$MEMBER_REPO" "$prNumber"

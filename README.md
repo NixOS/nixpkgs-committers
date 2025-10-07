@@ -28,6 +28,8 @@ The PR will ping the user and inform them that it will by default be merged and 
 If the PR is still open one month later,
 an automated comment will be posted with the next steps for the Nixpkgs commit delegators.
 
+If the PR is closed, retirement is delayed by another year.
+
 ## Automation setup
 
 Automation depends on a GitHub App with the following permissions:

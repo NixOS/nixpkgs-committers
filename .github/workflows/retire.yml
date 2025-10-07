@@ -37,8 +37,7 @@ jobs:
           # Fetch full history to determine when committers were added
           fetch-depth: 0
       - name: Run script
-        # One month plus a bit of leeway
-        run: scripts/retire.sh NixOS nixpkgs nixpkgs-committers members "yesterday 1 month ago"
+        run: scripts/retire.sh NixOS nixpkgs nixpkgs-committers members "yesterday 1 month ago" "1 year ago"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PROD: "1"
