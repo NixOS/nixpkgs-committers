@@ -182,9 +182,9 @@ for login in *; do
       trace git commit -m "Automatic retirement of @$login"
       effect git push -f -u origin "$branchName"
       prNumber=$({
-        echo "This is an automated PR to retire @$login as a Nixpkgs committers due to not using their commit access for 1 year."
+        echo "This is an automated PR to retire @$login as a Nixpkgs committer because they have not used their commit access in the past year."
         echo ""
-        echo "Make a comment with your motivation to keep commit access, otherwise this PR will be merged and implemented in 1 month."
+        echo "@$login: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented in one month."
         echo ""
         echo "> [!NOTE]"
         echo -n "> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs."
