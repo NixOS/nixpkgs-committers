@@ -6,8 +6,17 @@ whose members have write access to [Nixpkgs](https://github.com/nixos/nixpkgs).
 
 The [Nixpkgs commit delegators](https://github.com/orgs/NixOS/teams/commit-bit-delegation)
 maintain the member list in this repository.
-While it's in principle possible to request Nixpkgs commit permissions by creating a PR,
-please nominate yourself in [this issue](https://github.com/NixOS/nixpkgs/issues/321665) instead.
+
+## Nominations
+
+To nominate yourself or somebody else:
+1. Check [open nominations](/../../issues?q=state%3Aopen%20label%3Anomination) to make sure the user hasn't been nominated already.
+1. [Click this link](/../../new/main/members?filename=%3CGITHUB_HANDLE%3E) to create a new file in the [`members` directory](./members).
+1. Leave the file contents empty and replace `<GITHUB_HANDLE>` with the handle (without `@`) of the user you'd like to nominate .
+1. Click on "Commit changes..." and follow the steps to create a PR.
+1. State your motivation for the nomination in the PR description.
+
+Such nominations are also automatically announced in [this issue](/../../issues/35), which you can subscribe to for updates.
 
 ## Semi-automatic synchronisation
 

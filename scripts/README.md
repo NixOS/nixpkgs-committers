@@ -41,7 +41,41 @@ scripts/sync.sh infinisil-test-org actors members-test
 
 Check that it synchronises the files in the `members-test` directory with the team members of the `actors` team.
 
-## `retire.sh`
+## Testing `nomination.sh`
+
+This script does not depend on the current repository, but has some external effects.
+For testing, we'll use [PR #33](https://github.com/infinisil-test-org/nixpkgs-committers/pull/33) and [issue #30](https://github.com/infinisil-test-org/nixpkgs-committers/issues/30).
+
+To test:
+1. Delete all labels of the PR and reset the title:
+   ```bash
+   gh api --method DELETE /repos/infinisil-test-org/nixpkgs-committers/issues/33/labels
+   gh api --method PATCH /repos/infinisil-test-org/nixpkgs-committers/pulls/33 -f title="A non-conforming title"
+   ```
+1. Run the script while simulating that a non-nomination PR was opened:
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "removed members/infinisil"
+   ```
+
+   Ensure that it exits with 0 and wouldn't run any effects.
+1. Run the script while simulating that multiple users were nominated together:
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "removed members/foo"$'\n'"added members/bar"
+   ```
+
+   Ensure that it exits with non-0 and wouldn't run any effects.
+1. Run the script simulating a successful nomination
+   ```bash
+   scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "added members/infinisil"
+   ```
+
+   Ensure that it exits with 0 and would run effects to label the PR, change the title and post a comment in the issue.
+1. Rerun with effects
+   ```bash
+   PROD=1 scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "added members/infinisil"
+   ```
+
+## Testing `retire.sh`
 
 This script has external effects and as such needs a bit more care when testing.
 
@@ -76,7 +110,7 @@ The following sequence tests all code paths:
    ```
 
    Check that no PR would be opened.
-2. Run the script with the `empty` repo argument to simulate CI running with inactive users:
+1. Run the script with the `empty` repo argument to simulate CI running with inactive users:
 
    ```bash
    scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now
@@ -90,27 +124,27 @@ The following sequence tests all code paths:
 
    Check that it created the PR appropriately, including assigning the "retirement" label.
    You can undo this step by closing the PR.
-3. Run it again to simulate CI running again later:
+1. Run it again to simulate CI running again later:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now
    ```
    Check that no other PR is opened.
-4. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
+1. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now now
    ```
    Check that it undrafted the previous PR and posted an appropriate comment.
-5. Run it again to simulate CI running again later:
+1. Run it again to simulate CI running again later:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now now
    ```
    Check that no other PR is opened.
-6. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
+1. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org active nixpkgs-committers members-test now now
    ```
    Check that it gets undrafted with a comment listing the new activity.
-8. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
+1. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
    ```bash
    PROD=1 scripts/retire.sh infinisil-test-org empty nixpkgs-committers members-test now '1 day ago'
    ```
