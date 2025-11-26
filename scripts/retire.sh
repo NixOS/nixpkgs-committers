@@ -127,12 +127,12 @@ for login in *; do
       effect gh pr ready --repo "$ORG/$MEMBER_REPO" "$prNumber"
       {
         if (( activityCount > 0 )); then
-          echo "One month has passed, @$login has been active again:"
+          echo "One month has passed, and @$login has been active again:"
           cat "$tmp/$login"
           echo ""
           echo "If still appropriate, this PR may be merged and implemented by:"
         else
-          echo "One month has passed, to this PR should now be merged and implemented by:"
+          echo "One month has passed, so this PR should now be merged and implemented by:"
         fi
         echo "- Adding @$login to the [Retired Nixpkgs Contributors team](https://github.com/orgs/NixOS/teams/retired-nixpkgs-contributors)"
         echo '  ```sh'
