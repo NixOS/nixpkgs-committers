@@ -59,9 +59,16 @@ cd "$DIR"
 for login in *; do
 
   # Figure out when this person received the commit bit
-  # Get the unix epoch of the first commit that touched this file
+  # Get the unix epoch of the last commit that added this file
   # --first-parent is important to get the time of when the main branch was changed
-  fileCommitEpoch=$(git log --reverse --first-parent --format=%cd --date=unix -- "$login" | head -1)
+  fileCommitEpoch=$(git log \
+    --first-parent \
+    --no-follow \
+    --diff-filter=A \
+    --max-count=1 \
+    --format=%cd \
+    --date=unix \
+    -- "$login")
   if (( fileCommitEpoch < createdOnReceptionEpoch )); then
     # If it was created before creation actually matched the reception date
     # This branch can be removed after 2026-04-23
