@@ -1,5 +1,7 @@
 set -euo pipefail
 
+export TZ=UTC
+
 log() {
   echo "$@" >&2
 }
