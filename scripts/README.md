@@ -10,7 +10,7 @@ whose identifiers will be used here.
 
 - [infinisil-test-org](https://github.com/infinisil-test-org): A GitHub organisation you're part of
 - Repositories:
-  - [infinisil-test-org/empty](https://github.com/infinisil-test-org/empty): An empty one with no activity on it
+  - [infinisil-test-org/empty](https://github.com/infinisil-test-org/empty): A repository with only one commit, not attributed to your GitHub user
   - [infinisil-test-org/active](https://github.com/infinisil-test-org/active): One where you have some activity
   - [infinisil-test-org/nixpkgs-committers](https://github.com/infinisil-test-org/nixpkgs-committers): A fork of the upstream repo
 
@@ -22,7 +22,7 @@ whose identifiers will be used here.
 Once you have the above setup (or got @infinisil to add yourself to his), you have to prepare the following:
 
 - Add some activity of yours to the `active` repo.
-  To cover all code branches it's recommended to create, push to and delete a branch.
+  To match Nixpkgs, it’s recommended to do this by setting the “Default commit message” for merge commits to “Pull request title”, then creating and merging a PR.
   You can do this from the web interface.
 - Get the GitHub CLI available (`pkgs.github-cli`) and authenticate it using `gh auth login`
 - A local Git clone of this repository with the `origin` remote set to the test repository:

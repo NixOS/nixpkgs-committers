@@ -108,22 +108,20 @@ for login in *; do
     continue
   fi
 
-  trace gh api -X GET /repos/"$ORG"/"$ACTIVITY_REPO"/activity \
-    -f time_period=year \
-    -f actor="$login" \
+  PR_PREFIX="$ORG/$ACTIVITY_REPO" \
+  trace gh api -X GET /repos/"$ORG"/"$ACTIVITY_REPO"/commits \
+    -f since="$(date --date='1 year ago' --iso-8601=seconds)" \
+    -f author="$login" \
+    -f committer=web-flow \
     -f per_page=100 \
     --jq '.[] |
-      "- \(.timestamp) [\(.activity_type) on \(.ref | ltrimstr("refs/heads/"))](https://github.com/'"$ORG/$ACTIVITY_REPO"'/\(
-        if .activity_type == "branch_creation" then
-          "commit/\(.after)"
-        elif .activity_type == "branch_deletion" then
-          "commit/\(.before)"
-        else
-          "compare/\(.before)...\(.after)"
-        end
-      ))"' \
+      # PR merge commits have two parents. We also check it’s an
+      # authentic GitHub commit, because… why not?
+      select((.parents | length) == 2 and .commit.verification.verified) |
+      (.commit.message | capture(" \\((?<pr>#[0-9]+)\\)$").pr) as $pr |
+      "- `\(.commit.committer.date)` – \(env.PR_PREFIX)\($pr)"' \
     > "$tmp/$login"
-  activityCount=$(wc -l <"$tmp/$login")
+  mergeCount=$(wc -l <"$tmp/$login")
 
   if [[ "$prState" == open ]]; then
     # If there is an open PR already
@@ -133,7 +131,7 @@ for login in *; do
       log "$login has a retirement PR due, unmarking PR as draft and commenting with next steps"
       effect gh pr ready --repo "$ORG/$MEMBER_REPO" "$prNumber"
       {
-        if (( activityCount > 0 )); then
+        if (( mergeCount > 0 )); then
           echo "One month has passed, and @$login has been active again:"
           cat "$tmp/$login"
           echo ""
@@ -158,7 +156,7 @@ for login in *; do
     else
       log "$login has a retirement PR pending"
     fi
-  elif (( activityCount <= 0 )); then
+  elif (( mergeCount <= 0 )); then
     log "$login has become inactive, opening a PR"
     # If there is no PR yet, but they have become inactive
     (
@@ -192,7 +190,7 @@ for login in *; do
         -f "labels[]=retirement" >/dev/null
     )
   else
-    log "$login is active with $activityCount activities"
+    log "$login is active with $mergeCount merges"
   fi
   log ""
 done
