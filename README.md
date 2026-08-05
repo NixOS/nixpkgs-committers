@@ -4,6 +4,9 @@ This repository publicly tracks the [current members](./members) and [changes](.
 of the [Nixpkgs Committers](https://github.com/orgs/nixos/teams/nixpkgs-committers) team,
 whose members have write access to [Nixpkgs](https://github.com/nixos/nixpkgs).
 
+The [Nixpkgs core team](https://github.com/NixOS/org/blob/main/doc/nixpkgs-core.md)
+maintain the member list in this repository according to the [documented procedures](https://github.com/NixOS/nixpkgs-committers/issues/82).
+
 ## Nominations
 
 To nominate yourself or somebody else:
