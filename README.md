@@ -48,5 +48,5 @@ Automation depends on a GitHub App with the following permissions:
 
 The GitHub App should only be installed on this repository.
 To give the workflows access to the GitHub App:
-- Configure the App ID as the repository _variable_ `APP_ID`
+- Configure the Client ID as the repository _variable_ `CLIENT_ID`
 - Configure the private key as the repository _secret_ `PRIVATE_KEY`
