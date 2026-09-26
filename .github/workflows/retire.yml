@@ -10,10 +10,22 @@ on:
 
 permissions: {}
 
+# Runs read the activity cache artifact of the previous run, so they must not overlap.
+concurrency:
+  group: retire
+
+# An explicit `shell: bash` runs steps with `-eo pipefail`, not just `-e`
+defaults:
+  run:
+    shell: bash
+
 jobs:
   retire:
     name: retire
     runs-on: ubuntu-latest
+    permissions:
+      # To download the activity cache artifact from the previous run
+      actions: read
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
@@ -36,8 +48,44 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           # Fetch full history to determine when committers were added
           fetch-depth: 0
+      - name: Restore activity cache
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const restoreCache = require('./scripts/restore-cache.js');
+            await restoreCache({
+              github,
+              context,
+              core,
+              artifactName: 'retire-cache.json',
+              dir: '.cache',
+              branch: 'main',
+            });
       - name: Run script
-        run: scripts/retire.sh NixOS nixpkgs nixpkgs-committers members "yesterday 1 month ago" "1 year ago"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PROD: "1"
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const retire = require('./scripts/retire.js');
+            await retire({
+              github,
+              options: {
+                org: 'NixOS',
+                activityRepo: 'nixpkgs',
+                memberRepo: 'nixpkgs-committers',
+                dir: 'members',
+                noticeCutoffSpec: 'yesterday 1 month ago',
+                closeCutoffSpec: '1 year ago',
+                confirmCutoffSpec: '7 days ago',
+                cacheFile: '.cache/retire-cache.json',
+                prod: true,
+              },
+            });
+      - name: Save activity cache
+        uses: actions/upload-artifact@v7
+        with:
+          path: .cache/retire-cache.json
+          # Upload the file as-is, so it's readable in the browser and needs no unzipping.
+          # The artifact is then named after the file.
+          archive: false
+          if-no-files-found: error
