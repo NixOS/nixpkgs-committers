@@ -14,6 +14,11 @@ permissions: {}
 concurrency:
   group: retire
 
+# An explicit `shell: bash` runs steps with `-eo pipefail`, not just `-e`
+defaults:
+  run:
+    shell: bash
+
 jobs:
   retire:
     name: retire
