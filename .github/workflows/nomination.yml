@@ -17,7 +17,7 @@ jobs:
     if: ${{ ! contains(github.event.pull_request.labels.*.name, 'nomination') && github.event.pull_request.head.ref != 'create-pull-request/sync' }}
     steps:
       - name: Fetch source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Process nomination
         run: |
           set -o pipefail

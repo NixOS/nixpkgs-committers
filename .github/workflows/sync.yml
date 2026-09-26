@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Fetch source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run script
         run: scripts/sync.sh NixOS nixpkgs-committers members
         env:
