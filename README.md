@@ -46,6 +46,9 @@ We believe the skills to collaborate with others in the project, provide substan
 Anyone can nominate themselves or someone else for commit access.
 This includes first-time applicants and those who have previously had commit access removed.
 
+We won’t hold an application against a candidate even if we don’t feel they’re ready yet.
+**When in doubt, please nominate!**
+
 To nominate yourself or somebody else:
 1. Before nomination, ensure you have read and understood [committer responsibilities](#committer-responsibilities) above.
 1. Check [open nominations](/../../issues?q=state%3Aopen%20label%3Anomination) to make sure the user hasn't been nominated already.
