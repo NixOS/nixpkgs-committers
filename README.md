@@ -22,6 +22,32 @@ To nominate yourself or somebody else:
 
 Such nominations are also automatically announced in [this issue](/../../issues/35), which you can subscribe to for updates.
 
+## Removals
+
+### Inactivity
+
+As per [RFC 55](https://github.com/NixOS/rfcs/blob/master/rfcs/0055-retired-committers.md)
+and the SC-approved [amendment](https://github.com/NixOS/org/issues/91),
+inactive committers are routinely "retired" from being a Nixpkgs committer.
+
+Former committers may still be active in other ways, such as maintaining packages and modules.
+See [semi-automatic retirement](#semi-automatic-retirement) below for more detail.
+Former committers that wish to actively make contributions that require commit access may re-nominate themselves at any time.
+See [nominations](#nominations) above.
+
+### Emergencies and misuse
+
+If a committer violates the expectations outlined above, delegators may remove their commit access.
+
+Before removing an existing committer, we will make an effort to discuss concerns with them and give warning, and will try to reach consensus on these situations, per our usual procedures.
+
+Emergency situations where the health of the project warrants immediate removal are an exception, e.g. acute security or infrastructure risk from apparent account compromise or “going rogue”.
+
+If we make a non‐unanimous decision to remove a committer, we will publicly disclose who was involved in the decision for transparency.
+
+Individuals removed for cause may re-apply via the standard Nomination process once they feel they can demonstrate alignment with committer expectations.
+See [nominations](#nominations) above.
+
 ## Automation
 
 ### Semi-automatic synchronisation
@@ -36,8 +62,6 @@ which should be merged by the Nixpkgs commit delegators to reconcile the mismatc
 Every day, [a GitHub Action workflow](./.github/workflows/retire.yml) runs
 to check if any Nixpkgs committers have not used their commit access within the last year,
 in which case an automated PR is created to remove them from the member list.
-This is according to [RFC 55](https://github.com/NixOS/rfcs/blob/master/rfcs/0055-retired-committers.md)
-and the SC-approved [amendment](https://github.com/NixOS/org/issues/91).
 
 The PR will ping the user and inform them that it will by default be merged and implemented in one month.
 If the PR is still open one month later,
