@@ -59,6 +59,18 @@ To nominate yourself or somebody else:
 
 Such nominations are also automatically announced in [this issue](/../../issues/35), which you can subscribe to for updates.
 
+### How we process nominations
+
+We will leave applications open for feedback for at least one week before approving a new committer and aim to make a decision within four weeks.
+
+We will review concerns about prospective or existing committers that are raised to us, either publicly in this repository or Nixpkgs or privately.
+Reach out to philip.taron@gmail.com for private matters, or on the [Nixpkgs Zulip](https://nixpkgs.zulipchat.com).
+When concerns are sent privately, we will treat the identity of the reporter as confidential, with the exception of involving the community team if we believe the report warrants their review.
+
+When declining an application or removing an existing committer, we will give at least a brief public summary of the reasoning.
+We may also reach out to the person privately with more detail to give them a chance to discuss candidly outside of the public spotlight.
+To be clear, this is not to avoid transparency, and the recipients are free to publish the correspondence if they wish.
+
 ## Removals
 
 ### Inactivity
