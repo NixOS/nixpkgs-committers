@@ -35,6 +35,12 @@ When granted the ability to commit, you are expected to uphold the following:
 7. When you do break things, acknowledge your mistake and apologize.
     1. Try to make it better either by changing your behavior in future or by undoing what has been broken.
 
+### What we look for in committers
+
+The main things we look for in committers are **good communication**, **good judgement**, and **relevant experience**.
+We will take tenure, contributions, and reviews into account, but won’t use a strict numeric threshold to approve or decline applications.
+We believe the skills to collaborate with others in the project, provide substantive reviews that go beyond style matters, navigate conflict effectively, and avoid reckless actions are more important than any objective criteria we could write down.
+
 ## Nominations
 
 Anyone can nominate themselves or someone else for commit access.
