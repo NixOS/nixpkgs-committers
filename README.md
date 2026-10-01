@@ -10,6 +10,9 @@ according to the [documented procedures](https://github.com/NixOS/nixpkgs-commit
 
 ## Nominations
 
+Anyone can nominate themselves or someone else for commit access.
+This includes first-time applicants and those who have previously had commit access removed.
+
 To nominate yourself or somebody else:
 1. Check [open nominations](/../../issues?q=state%3Aopen%20label%3Anomination) to make sure the user hasn't been nominated already.
 1. [Click this link](/../../new/main/members?filename=%3CGITHUB_HANDLE%3E) to create a new file in the [`members` directory](./members).
