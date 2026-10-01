@@ -22,14 +22,16 @@ To nominate yourself or somebody else:
 
 Such nominations are also automatically announced in [this issue](/../../issues/35), which you can subscribe to for updates.
 
-## Semi-automatic synchronisation
+## Automation
+
+### Semi-automatic synchronisation
 
 Every day, [a GitHub Action workflow](./.github/workflows/sync.yml) runs
 to synchronise the members of the GitHub team with the member list in this repository.
 If they don't match, an automated PR is created,
 which should be merged by the Nixpkgs commit delegators to reconcile the mismatch.
 
-## Semi-automatic retirement
+### Semi-automatic retirement
 
 Every day, [a GitHub Action workflow](./.github/workflows/retire.yml) runs
 to check if any Nixpkgs committers have not used their commit access within the last year,
@@ -43,7 +45,7 @@ an automated comment will be posted with the next steps for the Nixpkgs commit d
 
 If the PR is closed, retirement is delayed by another year.
 
-## Automation setup
+### Setup
 
 Automation depends on a GitHub App with the following permissions:
 - Organisation: Members read only (to be able to read the team members)
@@ -53,3 +55,5 @@ The GitHub App should only be installed on this repository.
 To give the workflows access to the GitHub App:
 - Configure the Client ID as the repository _variable_ `CLIENT_ID`
 - Configure the private key as the repository _secret_ `PRIVATE_KEY`
+
+See [scripts/README.md](./scripts/README.md) for testing details.
