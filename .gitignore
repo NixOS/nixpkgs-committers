@@ -1,2 +1,5 @@
 .tmp
 .cache
+.direnv
+.envrc
+node_modules
