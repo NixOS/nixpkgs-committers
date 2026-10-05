@@ -1,4 +1,4 @@
-# Provides the dependencies for running scripts/retire-local.js,
+# Provides the dependencies for running scripts/retire-local.ts,
 # see scripts/README.md
 {
   pkgs ? import <nixpkgs> { },

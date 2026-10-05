@@ -52,7 +52,7 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const restoreCache = require('./scripts/restore-cache.js');
+            const { default: restoreCache } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/restore-cache.ts`);
             await restoreCache({
               github,
               context,
@@ -66,7 +66,7 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const retire = require('./scripts/retire.js');
+            const { default: retire } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/retire.ts`);
             await retire({
               github,
               options: {

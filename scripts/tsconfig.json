@@ -14,13 +14,11 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node16",
+    "moduleResolution": "nodenext",
 
     "allowImportingTsExtensions": true,
-    "allowJs": true,
-    "checkJs": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true,
+    "noEmit": true
   }
 }

@@ -75,11 +75,13 @@ To test:
    PROD=1 scripts/nomination.sh members infinisil-test-org/nixpkgs-committers 33 30 <<< "added members/infinisil"
    ```
 
-## Testing `retire.js`
+## Testing `retire.ts`
 
-In CI, `retire.js` runs via [`actions/github-script`](https://github.com/actions/github-script).
-Locally it can be run with `scripts/retire-local.js`, which uses the `gh` CLI for API access instead.
+In CI, `retire.ts` runs via [`actions/github-script`](https://github.com/actions/github-script).
+Locally it can be run with `scripts/retire-local.ts`, which authenticates an Octokit client using `gh auth token`.
 Run `nix-shell` in the repository root to get Node.js and `gh`; you still need to authenticate with `gh auth login`.
+The scripts use Node.js 24's built-in TypeScript support, so no compilation step is needed.
+Run `npm test --prefix scripts` to typecheck the scripts and run the test suite.
 
 This script has external effects and as such needs a bit more care when testing.
 
@@ -113,14 +115,14 @@ In CI it is set to `7 days ago` instead, which together with the `CACHE_FILE` ac
 
 1. Run the script with the `active` repo argument to simulate CI running without inactive users:
    ```bash
-   scripts/retire-local.js infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   scripts/retire-local.ts infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
    ```
 
    Check that no PR would be opened.
 1. Run the previous command again with `CACHE_FILE` set:
    ```bash
-   CACHE_FILE=.tmp-cache.json scripts/retire-local.js infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
-   CACHE_FILE=.tmp-cache.json scripts/retire-local.js infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts infinisil-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
    rm .tmp-cache.json
    ```
 
@@ -128,47 +130,47 @@ In CI it is set to `7 days ago` instead, which together with the `CACHE_FILE` ac
 1. Run the script with the `empty` repo argument to simulate CI running with inactive users:
 
    ```bash
-   scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
    ```
 
    Check that it would only create a PR for your own user and not the "new-committer-1" or "new-committer-2" user.
    Also check that with a `CONFIRM_CUTOFF` in the past (as used in CI), no PR would be opened yet:
 
    ```bash
-   scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now '7 days ago'
+   scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now '7 days ago'
    ```
 
    Then run it again with `PROD=1` to actually do it:
 
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   PROD=1 scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
    ```
 
    Check that it created the PR appropriately, including assigning the "retirement" label.
    You can undo this step by closing the PR.
 1. Run it again to simulate CI running again later:
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   PROD=1 scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
    ```
    Check that no other PR is opened.
 1. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test now now now
    ```
    Check that it undrafted the previous PR and posted an appropriate comment.
 1. Run it again to simulate CI running again later:
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test now now now
    ```
    Check that no other PR is opened.
 1. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org active nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts infinisil-test-org active nixpkgs-committers members-test now now now
    ```
    Check that it gets undrafted with a comment listing the new activity.
 1. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
    ```bash
-   PROD=1 scripts/retire-local.js infinisil-test-org empty nixpkgs-committers members-test now '1 day ago' now
+   PROD=1 scripts/retire-local.ts infinisil-test-org empty nixpkgs-committers members-test now '1 day ago' now
    ```
 
    Check that no other PR is opened.

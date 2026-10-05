@@ -2,14 +2,32 @@
 //
 // In CI this runs via actions/github-script (see .github/workflows/retire.yml),
 // which provides an authenticated Octokit instance as `github`.
-// Locally it runs via scripts/retire-local.js, which provides a compatible
-// shim backed by the `gh` CLI. See scripts/README.md for the test sequence.
+// Locally it runs via scripts/retire-local.ts, which authenticates Octokit
+// with `gh auth token`. See scripts/README.md for the test sequence.
 
-'use strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-const fs = require('fs');
-const path = require('path');
-const { execFileSync } = require('child_process');
+type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>
+
+export interface RetireOptions {
+  org: string;
+  activityRepo: string;
+  memberRepo: string;
+  dir: string;
+  noticeCutoffSpec: string;
+  closeCutoffSpec: string;
+  confirmCutoffSpec: string;
+  cacheFile?: string;
+  prod: boolean;
+}
+
+interface CachedActivity {
+  mergeEpoch?: number;
+  mergePr?: string;
+  firstInactive?: number;
+}
 
 // Parse a small subset of GNU `date --date` expressions (in UTC), enough for
 // the specs this script is invoked with: "now", "yesterday", "<n> <unit> ago"
@@ -17,7 +35,7 @@ const { execFileSync } = require('child_process');
 // "2024-10-07". Relative specs are evaluated against `now` (in milliseconds),
 // so that callers can use the same instant for all of them.
 // Returns a unix epoch in seconds.
-function parseDate(spec, now = Date.now()) {
+function parseDate(spec: string, now = Date.now()): number {
   let s = spec.trim();
 
   const absolute = Date.parse(/^\d{4}-\d{2}-\d{2}/.test(s) ? s : '');
@@ -26,7 +44,7 @@ function parseDate(spec, now = Date.now()) {
   }
 
   const d = new Date(now);
-  const setters = {
+  const setters: Record<string, (n: number) => number> = {
     second: (n) => d.setUTCSeconds(d.getUTCSeconds() - n),
     minute: (n) => d.setUTCMinutes(d.getUTCMinutes() - n),
     hour: (n) => d.setUTCHours(d.getUTCHours() - n),
@@ -52,11 +70,14 @@ function parseDate(spec, now = Date.now()) {
   return Math.floor(d.getTime() / 1000);
 }
 
-function isoSeconds(epoch) {
+function isoSeconds(epoch: number): string {
   return new Date(epoch * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
-module.exports = async function retire({ github, options }) {
+export default async function retire({ github, options }: {
+  github: GitHub;
+  options: RetireOptions;
+}): Promise<void> {
   const {
     org,
     activityRepo,
@@ -71,16 +92,16 @@ module.exports = async function retire({ github, options }) {
 
   const log = (msg = '') => console.error(msg);
 
-  const git = (...args) =>
+  const git = (...args: string[]) =>
     execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trimEnd();
 
-  const trace = (fn, description) => {
+  const trace = <T>(fn: () => T, description: string): T => {
     log(`Running: ${description}`);
     return fn();
   };
 
   // Skip side effects unless running in production, but log what would happen
-  const effect = (fn, description) => {
+  const effect = <T>(fn: () => T, description: string): T | undefined => {
     if (prod) {
       return trace(fn, description);
     }
@@ -152,7 +173,7 @@ module.exports = async function retire({ github, options }) {
   // so a spurious empty response can never make a cached-active user look inactive.
   // Bump this version to invalidate all previously cached data.
   const cacheVersion = 1;
-  let cache = {};
+  let cache: Record<string, CachedActivity> = {};
   if (cacheFile) {
     try {
       const parsed = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
@@ -166,7 +187,7 @@ module.exports = async function retire({ github, options }) {
       log(`No usable activity cache at ${cacheFile}, starting fresh`);
     }
   }
-  const newCache = {};
+  const newCache: Record<string, CachedActivity> = {};
 
   const logins = fs.readdirSync(dir).sort();
   for (const login of logins) {
@@ -208,7 +229,9 @@ module.exports = async function retire({ github, options }) {
     const prInfo = (
       await trace(
         () =>
-          github.request(`GET /repos/${org}/${memberRepo}/pulls`, {
+          github.rest.pulls.list({
+            owner: org,
+            repo: memberRepo,
             state: 'all',
             head: `${org}:${branchName}`,
             per_page: 1,
@@ -218,7 +241,7 @@ module.exports = async function retire({ github, options }) {
     ).data[0];
     const prState = prInfo ? prInfo.state : 'none';
 
-    if (prState === 'closed' && Date.parse(prInfo.closed_at) / 1000 > closeCutoff) {
+    if (prInfo?.state === 'closed' && prInfo.closed_at && Date.parse(prInfo.closed_at) / 1000 > closeCutoff) {
       log(`${login} had a retirement PR that was closed recently, skipping retirement check`);
       // Keep the cached merge so the #100 protection survives the skip,
       // but drop the inactivity observation: it isn't being confirmed while skipped,
@@ -241,7 +264,7 @@ module.exports = async function retire({ github, options }) {
     // What previous runs observed about this person's merge activity
     let { mergeEpoch = 0, mergePr = '', firstInactive = 0 } = cache[login] ?? {};
 
-    let activityLines = [];
+    const activityLines: { epoch: number; pr: string; line: string }[] = [];
     let queried = false;
     if (prState !== 'open' && mergeEpoch > queryCutoff) {
       // Recent cached activity already rules out retirement,
@@ -255,7 +278,9 @@ module.exports = async function retire({ github, options }) {
       const commits = (
         await trace(
           () =>
-            github.request(`GET /repos/${org}/${activityRepo}/commits`, {
+            github.rest.repos.listCommits({
+              owner: org,
+              repo: activityRepo,
               since: isoSeconds(sinceEpoch),
               author: login,
               committer: 'web-flow',
@@ -267,7 +292,7 @@ module.exports = async function retire({ github, options }) {
       for (const commit of commits) {
         // PR merge commits have two parents. We also check it’s an
         // authentic GitHub commit, because… why not?
-        if (commit.parents.length !== 2 || !commit.commit.verification.verified) {
+        if (commit.parents.length !== 2 || !commit.commit.verification?.verified || !commit.commit.committer?.date) {
           continue;
         }
         const m = commit.commit.message.match(/ \((#[0-9]+)\)$/m);
@@ -300,20 +325,22 @@ module.exports = async function retire({ github, options }) {
     // Remember the observations for the cache written at the end of the run
     newCache[login] = { mergeEpoch, mergePr, firstInactive };
 
-    if (!prod) {
+    if (tmp) {
       fs.writeFileSync(
         path.join(tmp, login),
         activityLines.map((a) => a.line + '\n').join(''),
       );
     }
 
-    if (prState === 'open') {
+    if (prInfo?.state === 'open') {
       if (activityLines.length === 0 && mergeEpoch > yearAgo) {
         // The query came back empty even though the cache proves activity
         // (issue #100), so reconstruct the activity list from the cache
-        activityLines = [
-          { line: `- \`${isoSeconds(mergeEpoch)}\` – ${org}/${activityRepo}${mergePr}` },
-        ];
+        activityLines.push({
+          epoch: mergeEpoch,
+          pr: mergePr,
+          line: `- \`${isoSeconds(mergeEpoch)}\` – ${org}/${activityRepo}${mergePr}`,
+        });
       }
       // If there is an open PR already
       const prNumber = prInfo.number;
@@ -332,7 +359,7 @@ module.exports = async function retire({ github, options }) {
             ),
           `markPullRequestReadyForReview ${org}/${memberRepo}#${prNumber}`,
         );
-        const bodyLines = [];
+        const bodyLines: string[] = [];
         if (activityLines.length > 0) {
           bodyLines.push(
             `One month has passed, and @${login} has been active again:`,
@@ -360,7 +387,10 @@ module.exports = async function retire({ github, options }) {
         );
         await effect(
           () =>
-            github.request(`POST /repos/${org}/${memberRepo}/issues/${prNumber}/comments`, {
+            github.rest.issues.createComment({
+              owner: org,
+              repo: memberRepo,
+              issue_number: prNumber,
               body: bodyLines.join('\n'),
             }),
           `POST comment on ${org}/${memberRepo}#${prNumber}:\n${bodyLines.join('\n')}`,
@@ -403,7 +433,9 @@ module.exports = async function retire({ github, options }) {
         ].join('\n');
         const pr = await effect(
           () =>
-            github.request(`POST /repos/${org}/${memberRepo}/pulls`, {
+            github.rest.pulls.create({
+              owner: org,
+              repo: memberRepo,
               title: `Automatic retirement of @${login}`,
               body,
               head: `${org}:${branchName}`,
@@ -415,7 +447,10 @@ module.exports = async function retire({ github, options }) {
         if (pr) {
           await effect(
             () =>
-              github.request(`POST /repos/${org}/${memberRepo}/issues/${pr.data.number}/labels`, {
+              github.rest.issues.addLabels({
+                owner: org,
+                repo: memberRepo,
+                issue_number: pr.data.number,
                 labels: ['retirement'],
               }),
             `POST retirement label on ${org}/${memberRepo}#${pr.data.number}`,
@@ -438,4 +473,4 @@ module.exports = async function retire({ github, options }) {
     fs.renameSync(cacheFile + '.tmp', cacheFile);
     log(`Wrote activity cache to ${cacheFile}`);
   }
-};
+}

@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "typecheck": "tsc --build",
+    "typecheck": "tsc --noEmit",
     "testsuite": "node --test",
     "test": "npm run typecheck && npm run testsuite"
   },
