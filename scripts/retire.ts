@@ -72,6 +72,10 @@ function isoSeconds(epoch: number): string {
   return new Date(epoch * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+function isoDate(epoch: number): string {
+  return isoSeconds(epoch).slice(0, 10);
+}
+
 export default async function retire({ github, options }: {
   github: GitHub;
   options: RetireOptions;
@@ -110,6 +114,8 @@ export default async function retire({ github, options }: {
   const nowEpoch = Math.floor(now / 1000);
 
   const noticeCutoff = parseDate(config.noticeCutoffSpec, now);
+  // A retirement PR opened now becomes due once it's older than the notice period
+  const noticeDeadline = nowEpoch + (nowEpoch - noticeCutoff);
 
   // People that received the commit bit after this date won't be retired
   const newCutoff = parseDate(config.newCutoffSpec, now);
@@ -380,7 +386,7 @@ export default async function retire({ github, options }: {
         const body = [
           `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access in the past ${config.activityCutoffSpec}.`,
           '',
-          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${(new Date(activityCutoff)).toUTCString()}.`,
+          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${isoDate(noticeDeadline)}.`,
           '',
           '> [!NOTE]',
           '> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs.' +
