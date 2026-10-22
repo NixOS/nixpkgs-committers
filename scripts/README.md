@@ -83,6 +83,10 @@ Run `nix-shell` in the repository root to get Node.js and `gh`; you still need t
 The scripts use Node.js 24's built-in TypeScript support, so no compilation step is needed.
 Run `npm test --prefix scripts` to typecheck the scripts and run the test suite.
 
+Retirement date cutoffs are configured in [`retire-config.ts`](retire-config.ts).
+To simulate different cutoffs while testing, edit that file locally and restore
+the production values when finished.
+
 This script has external effects and as such needs a bit more care when testing.
 
 ### Setup (important!)
@@ -110,19 +114,19 @@ git push -f -u origin HEAD
 
 The following sequence tests all code paths.
 
-The `CONFIRM_CUTOFF` argument is passed as `now` so that a single run is enough to open a retirement PR.
-In CI it is set to `7 days ago` instead, which together with the `CACHE_FILE` activity cache (persisted between runs as a workflow artifact) requires a week of daily runs to agree before a PR is opened.
+Before starting, set `closeCutoffSpec` and `confirmCutoffSpec` to `now` in `retire-config.ts` so that a single run is enough to open a retirement PR.
+The production value of `confirmCutoffSpec` is `7 days ago`, which together with the `CACHE_FILE` activity cache (persisted between runs as a workflow artifact) requires a week of daily runs to agree before a PR is opened.
 
 1. Run the script with the `active` repo argument to simulate CI running without inactive users:
    ```bash
-   scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
    ```
 
    Check that no PR would be opened.
 1. Run the previous command again with `CACHE_FILE` set:
    ```bash
-   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
-   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
+   CACHE_FILE=.tmp-cache.json scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
    rm .tmp-cache.json
    ```
 
@@ -130,47 +134,49 @@ In CI it is set to `7 days ago` instead, which together with the `CACHE_FILE` ac
 1. Run the script with the `empty` repo argument to simulate CI running with inactive users:
 
    ```bash
-   scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
 
    Check that it would only create a PR for your own user and not the "new-committer-1" or "new-committer-2" user.
-   Also check that with a `CONFIRM_CUTOFF` in the past (as used in CI), no PR would be opened yet:
+   Also check that with `confirmCutoffSpec` temporarily set to `7 days ago` (as used in CI), no PR would be opened yet:
 
    ```bash
-   scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now '7 days ago'
+   scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
 
-   Then run it again with `PROD=1` to actually do it:
+   Set `confirmCutoffSpec` back to `now`, then run it again with `PROD=1` to actually do it:
 
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
 
    Check that it created the PR appropriately, including assigning the "retirement" label.
    You can undo this step by closing the PR.
 1. Run it again to simulate CI running again later:
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test 'yesterday 1 month ago' now now
+   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
    Check that no other PR is opened.
-1. Run it again with `now` as the notice cutoff date to simulate the time interval passing:
+1. Set `noticeCutoffSpec` to `now` and run it again to simulate the time interval passing:
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
    Check that it undrafted the previous PR and posted an appropriate comment.
 1. Run it again to simulate CI running again later:
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
    Check that no other PR is opened.
 1. Reset by marking the PR as a draft again, then run it again with the `active` repo argument to simulate activity during the time interval:
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test now now now
+   PROD=1 scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
    ```
    Check that it gets undrafted with a comment listing the new activity.
-1. Close the PR, then run the script again with no activity and for an earlier close cutoff, simulating that the retirement was delayed:
+1. Close the PR, set `closeCutoffSpec` to `1 day ago`, then run the script again with no activity, simulating that the retirement was delayed:
    ```bash
-   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test now '1 day ago' now
+   PROD=1 scripts/retire-local.ts nixos-test-org empty nixpkgs-committers members-test
    ```
 
    Check that no other PR is opened.
+
+Restore the production date specs in `retire-config.ts` after testing.

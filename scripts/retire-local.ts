@@ -7,16 +7,16 @@ import { getOctokit } from '@actions/github';
 import retire from './retire.ts';
 
 function usage(): never {
-  console.error(`Usage: ${process.argv[1]} ORG ACTIVITY_REPO MEMBER_REPO DIR NOTICE_CUTOFF CLOSE_CUTOFF CONFIRM_CUTOFF`);
+  console.error(`Usage: ${process.argv[1]} ORG ACTIVITY_REPO MEMBER_REPO DIR`);
   console.error('');
   console.error('Optionally set CACHE_FILE to a path for persisting activity observations between runs.');
   console.error('Set PROD=1 to actually perform side effects.');
   process.exit(1);
 }
 
-const [org, activityRepo, memberRepo, dir, noticeCutoffSpec, closeCutoffSpec, confirmCutoffSpec] =
-  process.argv.slice(2);
-if (!org || !activityRepo || !memberRepo || !dir || !noticeCutoffSpec || !closeCutoffSpec || !confirmCutoffSpec) {
+const args = process.argv.slice(2);
+const [org, activityRepo, memberRepo, dir] = args;
+if (args.length !== 4 || !org || !activityRepo || !memberRepo || !dir) {
   usage();
 }
 
@@ -30,9 +30,6 @@ retire({
     activityRepo,
     memberRepo,
     dir,
-    noticeCutoffSpec,
-    closeCutoffSpec,
-    confirmCutoffSpec,
     cacheFile: process.env.CACHE_FILE,
     prod: Boolean(process.env.PROD),
   },

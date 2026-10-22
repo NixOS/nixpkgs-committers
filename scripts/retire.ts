@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import config from './retire-config.ts';
 
 type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>;
 
@@ -16,9 +17,6 @@ export interface RetireOptions {
   activityRepo: string;
   memberRepo: string;
   dir: string;
-  noticeCutoffSpec: string;
-  closeCutoffSpec: string;
-  confirmCutoffSpec: string;
   cacheFile?: string;
   prod: boolean;
 }
@@ -83,9 +81,6 @@ export default async function retire({ github, options }: {
     activityRepo,
     memberRepo,
     dir,
-    noticeCutoffSpec,
-    closeCutoffSpec,
-    confirmCutoffSpec,
     cacheFile,
     prod,
   } = options;
@@ -114,49 +109,30 @@ export default async function retire({ github, options }: {
   const now = Date.now();
   const nowEpoch = Math.floor(now / 1000);
 
-  const noticeCutoff = parseDate(noticeCutoffSpec, now);
+  const noticeCutoff = parseDate(config.noticeCutoffSpec, now);
 
   // People that received the commit bit after this date won't be retired
-  const newCutoff = parseDate('1 year ago', now);
+  const newCutoff = parseDate(config.newCutoffSpec, now);
 
   // Users whose retirement PRs were closed after this date won't be retired
-  const closeCutoff = parseDate(closeCutoffSpec, now);
+  const closeCutoff = parseDate(config.closeCutoffSpec, now);
 
   // Users first observed as inactive after this date won't be retired yet;
   // they keep being checked until the observation is old enough.
   // This prevents a single spurious empty response from the /commits endpoint
   // from causing an accidental retirement PR (see issue #100).
-  const confirmCutoff = parseDate(confirmCutoffSpec, now);
+  const confirmCutoff = parseDate(config.confirmCutoffSpec, now);
 
   // People are considered active if they merged a PR after this date
-  const yearAgo = parseDate('1 year ago', now);
+  const yearAgo = parseDate(config.activityCutoffSpec, now);
 
   // Cached merges newer than this are trusted without querying GitHub again.
-  // The gap until the 1-year mark means the /commits endpoint gets queried
-  // for about a month of daily runs before a retirement PR can be opened,
-  // so a retirement is backed by many independent queries agreeing.
-  const queryCutoff = parseDate('11 months ago', now);
+  const queryCutoff = parseDate(config.queryCutoffSpec, now);
 
   // We need to know when people received their commit bit to avoid retiring
-  // them within the first year. For now this is done either with the git
-  // creation date of the file, or its contents:
-  //
-  // | commit bit reception date  | file creation date | file contents  |
-  // | -------------------------- | ------------------ | -------------- |
-  // | A)         -∞ - 2024-10-06 | 2025-07-16         | empty          |
-  // | B) 2024-10-07 - 2025-04-22 | 2025-07-16         | reception date |
-  // | C) 2025-08-13 - ∞          | reception date     | empty          |
-  //
-  // After 2026-04-23 (one year after C started), the file creation date
-  // for all first-year committers will match the reception date,
-  // while everybody else will have been a committer for more than one year.
-  // This means the code can then be simplified to just
-  // check if the file creation date is in the last year.
-  //
-  // For now however, the code needs to check if the file creation date
-  // is before 2025-07-17 to distinguish between periods A and C,
-  // so we hardcode that date for the code to use.
-  const createdOnReceptionEpoch = parseDate('2025-07-17', now);
+  // them too soon. Older member files may contain the reception date;
+  // see retire-config.ts for the historical cutoff and migration details.
+  const createdOnReceptionEpoch = parseDate(config.createdOnReceptionSpec, now);
 
   let tmp;
   if (!prod) {
@@ -210,7 +186,7 @@ export default async function retire({ github, options }: {
     let receptionEpoch;
     if (fileCommitEpoch < createdOnReceptionEpoch) {
       // If it was created before creation actually matched the reception date
-      // This branch can be removed after 2026-04-23
+      // See retire-config.ts for when this special handling can be removed.
       const contents = fs.readFileSync(path.join(dir, login), 'utf8').trim();
       if (contents !== '') {
         // If the file is non-empty it indicates an explicit reception date
