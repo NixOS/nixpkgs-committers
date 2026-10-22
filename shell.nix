@@ -10,7 +10,7 @@ pkgs.mkShellNoCC {
     pkgs.gh
   ];
 
-  # Needs to be the real, writable dir 
+  # Needs to be the real, writable dir
   npmRoot = "scripts";
 
   npmDeps = pkgs.importNpmLock.buildNodeModules {

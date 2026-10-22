@@ -9,17 +9,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>
-type Context = typeof import('@actions/github').context
-type Core = typeof import('@actions/core')
+type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>;
+type Context = typeof import('@actions/github').context;
+type Core = typeof import('@actions/core');
 
 export default async function restoreCache({ github, context, core, artifactName, dir, branch }: {
-  github: GitHub
-  context: Context
-  core: Core
-  artifactName: string
-  dir: string
-  branch: string
+  github: GitHub;
+  context: Context;
+  core: Core;
+  artifactName: string;
+  dir: string;
+  branch: string;
 }): Promise<void> {
   const { owner, repo } = context.repo;
   try {
@@ -56,11 +56,11 @@ export default async function restoreCache({ github, context, core, artifactName
     // downloads as the file itself. A .json file is served as application/json,
     // which Octokit parses, but accept raw text or bytes as well.
     const { data } = await github.rest.actions.downloadArtifact({
-        owner,
-        repo,
-        artifact_id: artifact.id,
-        archive_format: 'zip',
-    })
+      owner,
+      repo,
+      artifact_id: artifact.id,
+      archive_format: 'zip',
+    });
     const contents =
       data instanceof ArrayBuffer
         ? Buffer.from(data)

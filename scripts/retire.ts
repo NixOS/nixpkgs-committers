@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>
+type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>;
 
 export interface RetireOptions {
   org: string;
