@@ -129,11 +129,6 @@ export default async function retire({ github, options }: {
   // Cached merges newer than this are trusted without querying GitHub again.
   const queryCutoff = parseDate(config.queryCutoffSpec, now);
 
-  // We need to know when people received their commit bit to avoid retiring
-  // them too soon. Older member files may contain the reception date;
-  // see retire-config.ts for the historical cutoff and migration details.
-  const createdOnReceptionEpoch = parseDate(config.createdOnReceptionSpec, now);
-
   let tmp;
   if (!prod) {
     tmp = path.join(git('rev-parse', '--show-toplevel'), '.tmp');
@@ -183,22 +178,6 @@ export default async function retire({ github, options }: {
         login,
       ),
     );
-    let receptionEpoch;
-    if (fileCommitEpoch < createdOnReceptionEpoch) {
-      // If it was created before creation actually matched the reception date
-      // See retire-config.ts for when this special handling can be removed.
-      const contents = fs.readFileSync(path.join(dir, login), 'utf8').trim();
-      if (contents !== '') {
-        // If the file is non-empty it indicates an explicit reception date
-        receptionEpoch = parseDate(contents, now);
-      } else {
-        // Otherwise they received the commit bit more than a year ago (start of unix epoch, 1970)
-        receptionEpoch = 0;
-      }
-    } else {
-      // Otherwise creation matches reception
-      receptionEpoch = fileCommitEpoch;
-    }
 
     // Latest retirement PR, whether draft, open or closed
     const branchName = `retire-${login}`;
@@ -229,7 +208,7 @@ export default async function retire({ github, options }: {
     }
 
     // If the commit bit was received after the cutoff date, don't retire in any case
-    if (receptionEpoch > newCutoff) {
+    if (fileCommitEpoch > newCutoff) {
       log(`${login} became a committer less than 1 year ago, skipping retirement check`);
       if (cache[login]) {
         newCache[login] = { ...cache[login], firstInactive: 0 };
