@@ -124,7 +124,7 @@ export default async function retire({ github, options }: {
   const confirmCutoff = parseDate(config.confirmCutoffSpec, now);
 
   // People are considered active if they merged a PR after this date
-  const yearAgo = parseDate(config.activityCutoffSpec, now);
+  const activityCutoff = parseDate(config.activityCutoffSpec, now);
 
   // Cached merges newer than this are trusted without querying GitHub again.
   const queryCutoff = parseDate(config.queryCutoffSpec, now);
@@ -250,7 +250,7 @@ export default async function retire({ github, options }: {
       // For an open PR the comment lists activity from the whole past year;
       // otherwise only merges newer than the cached one are of interest
       const sinceEpoch =
-        prState === 'open' ? yearAgo : Math.max(yearAgo, mergeEpoch + 1);
+        prState === 'open' ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
       const commits = (
         await trace(
           () =>
@@ -309,7 +309,7 @@ export default async function retire({ github, options }: {
     }
 
     if (prInfo?.state === 'open') {
-      if (activityLines.length === 0 && mergeEpoch > yearAgo) {
+      if (activityLines.length === 0 && mergeEpoch > activityCutoff) {
         // The query came back empty even though the cache proves activity
         // (issue #100), so reconstruct the activity list from the cache
         activityLines.push({
@@ -374,7 +374,7 @@ export default async function retire({ github, options }: {
       } else {
         log(`${login} has a retirement PR pending`);
       }
-    } else if (activityLines.length > 0 || mergeEpoch > yearAgo) {
+    } else if (activityLines.length > 0 || mergeEpoch > activityCutoff) {
       // Merges returned by the query are always newer than yearAgo (the since parameter),
       // so activityLines being non-empty implies mergeEpoch > yearAgo.
       if (activityLines.length > 0) {
