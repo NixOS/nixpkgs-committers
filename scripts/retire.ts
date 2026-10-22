@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import config from './retire-config.ts';
 
 type GitHub = InstanceType<typeof import('@actions/github/lib/utils').GitHub>;
 
@@ -16,9 +17,6 @@ export interface RetireOptions {
   activityRepo: string;
   memberRepo: string;
   dir: string;
-  noticeCutoffSpec: string;
-  closeCutoffSpec: string;
-  confirmCutoffSpec: string;
   cacheFile?: string;
   prod: boolean;
 }
@@ -74,6 +72,10 @@ function isoSeconds(epoch: number): string {
   return new Date(epoch * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+function isoDate(epoch: number): string {
+  return isoSeconds(epoch).slice(0, 10);
+}
+
 export default async function retire({ github, options }: {
   github: GitHub;
   options: RetireOptions;
@@ -83,9 +85,6 @@ export default async function retire({ github, options }: {
     activityRepo,
     memberRepo,
     dir,
-    noticeCutoffSpec,
-    closeCutoffSpec,
-    confirmCutoffSpec,
     cacheFile,
     prod,
   } = options;
@@ -114,49 +113,27 @@ export default async function retire({ github, options }: {
   const now = Date.now();
   const nowEpoch = Math.floor(now / 1000);
 
-  const noticeCutoff = parseDate(noticeCutoffSpec, now);
+  const noticeCutoff = parseDate(config.noticeCutoffSpec, now);
+  // A retirement PR opened now becomes due once it's older than the notice period
+  const noticeDeadline = nowEpoch + (nowEpoch - noticeCutoff);
 
   // People that received the commit bit after this date won't be retired
-  const newCutoff = parseDate('1 year ago', now);
+  const newCutoff = parseDate(config.newCutoffSpec, now);
 
   // Users whose retirement PRs were closed after this date won't be retired
-  const closeCutoff = parseDate(closeCutoffSpec, now);
+  const closeCutoff = parseDate(config.closeCutoffSpec, now);
 
   // Users first observed as inactive after this date won't be retired yet;
   // they keep being checked until the observation is old enough.
   // This prevents a single spurious empty response from the /commits endpoint
   // from causing an accidental retirement PR (see issue #100).
-  const confirmCutoff = parseDate(confirmCutoffSpec, now);
+  const confirmCutoff = parseDate(config.confirmCutoffSpec, now);
 
   // People are considered active if they merged a PR after this date
-  const yearAgo = parseDate('1 year ago', now);
+  const activityCutoff = parseDate(config.activityCutoffSpec, now);
 
   // Cached merges newer than this are trusted without querying GitHub again.
-  // The gap until the 1-year mark means the /commits endpoint gets queried
-  // for about a month of daily runs before a retirement PR can be opened,
-  // so a retirement is backed by many independent queries agreeing.
-  const queryCutoff = parseDate('11 months ago', now);
-
-  // We need to know when people received their commit bit to avoid retiring
-  // them within the first year. For now this is done either with the git
-  // creation date of the file, or its contents:
-  //
-  // | commit bit reception date  | file creation date | file contents  |
-  // | -------------------------- | ------------------ | -------------- |
-  // | A)         -∞ - 2024-10-06 | 2025-07-16         | empty          |
-  // | B) 2024-10-07 - 2025-04-22 | 2025-07-16         | reception date |
-  // | C) 2025-08-13 - ∞          | reception date     | empty          |
-  //
-  // After 2026-04-23 (one year after C started), the file creation date
-  // for all first-year committers will match the reception date,
-  // while everybody else will have been a committer for more than one year.
-  // This means the code can then be simplified to just
-  // check if the file creation date is in the last year.
-  //
-  // For now however, the code needs to check if the file creation date
-  // is before 2025-07-17 to distinguish between periods A and C,
-  // so we hardcode that date for the code to use.
-  const createdOnReceptionEpoch = parseDate('2025-07-17', now);
+  const queryCutoff = parseDate(config.queryCutoffSpec, now);
 
   let tmp;
   if (!prod) {
@@ -207,22 +184,6 @@ export default async function retire({ github, options }: {
         login,
       ),
     );
-    let receptionEpoch;
-    if (fileCommitEpoch < createdOnReceptionEpoch) {
-      // If it was created before creation actually matched the reception date
-      // This branch can be removed after 2026-04-23
-      const contents = fs.readFileSync(path.join(dir, login), 'utf8').trim();
-      if (contents !== '') {
-        // If the file is non-empty it indicates an explicit reception date
-        receptionEpoch = parseDate(contents, now);
-      } else {
-        // Otherwise they received the commit bit more than a year ago (start of unix epoch, 1970)
-        receptionEpoch = 0;
-      }
-    } else {
-      // Otherwise creation matches reception
-      receptionEpoch = fileCommitEpoch;
-    }
 
     // Latest retirement PR, whether draft, open or closed
     const branchName = `retire-${login}`;
@@ -253,8 +214,8 @@ export default async function retire({ github, options }: {
     }
 
     // If the commit bit was received after the cutoff date, don't retire in any case
-    if (receptionEpoch > newCutoff) {
-      log(`${login} became a committer less than 1 year ago, skipping retirement check`);
+    if (fileCommitEpoch > newCutoff) {
+      log(`${login} became a committer after ${isoDate(newCutoff)}, skipping retirement check`);
       if (cache[login]) {
         newCache[login] = { ...cache[login], firstInactive: 0 };
       }
@@ -271,10 +232,10 @@ export default async function retire({ github, options }: {
       // no need to bother the unreliable /commits endpoint
     } else {
       queried = true;
-      // For an open PR the comment lists activity from the whole past year;
+      // For an open PR the comment lists all activity since activityCutoff;
       // otherwise only merges newer than the cached one are of interest
       const sinceEpoch =
-        prState === 'open' ? yearAgo : Math.max(yearAgo, mergeEpoch + 1);
+        prState === 'open' ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
       const commits = (
         await trace(
           () =>
@@ -333,7 +294,7 @@ export default async function retire({ github, options }: {
     }
 
     if (prInfo?.state === 'open') {
-      if (activityLines.length === 0 && mergeEpoch > yearAgo) {
+      if (activityLines.length === 0 && mergeEpoch > activityCutoff) {
         // The query came back empty even though the cache proves activity
         // (issue #100), so reconstruct the activity list from the cache
         activityLines.push({
@@ -362,13 +323,13 @@ export default async function retire({ github, options }: {
         const bodyLines: string[] = [];
         if (activityLines.length > 0) {
           bodyLines.push(
-            `One month has passed, and @${login} has been active again:`,
+            `The allotted time has passed, and @${login} has been active again:`,
             ...activityLines.map((a) => a.line),
             '',
             'If still appropriate, this PR may be merged and implemented by:',
           );
         } else {
-          bodyLines.push('One month has passed, so this PR should now be merged and implemented by:');
+          bodyLines.push('The allotted time has passed, so this PR should now be merged and implemented by:');
         }
         bodyLines.push(
           `- Adding @${login} to the [Retired Nixpkgs Contributors team](https://github.com/orgs/NixOS/teams/retired-nixpkgs-contributors)`,
@@ -398,9 +359,9 @@ export default async function retire({ github, options }: {
       } else {
         log(`${login} has a retirement PR pending`);
       }
-    } else if (activityLines.length > 0 || mergeEpoch > yearAgo) {
-      // Merges returned by the query are always newer than yearAgo (the since parameter),
-      // so activityLines being non-empty implies mergeEpoch > yearAgo.
+    } else if (activityLines.length > 0 || mergeEpoch > activityCutoff) {
+      // Merges returned by the query are always newer than activityCutoff (the since parameter),
+      // so activityLines being non-empty implies mergeEpoch > activityCutoff.
       if (activityLines.length > 0) {
         log(`${login} is active with ${activityLines.length} new merges`);
       } else {
@@ -423,9 +384,9 @@ export default async function retire({ github, options }: {
           `git push -f -u origin ${branchName}`,
         );
         const body = [
-          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access in the past year.`,
+          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access since ${isoDate(activityCutoff)}.`,
           '',
-          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented in one month.`,
+          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${isoDate(noticeDeadline)}.`,
           '',
           '> [!NOTE]',
           '> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs.' +
