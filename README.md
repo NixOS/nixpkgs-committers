@@ -109,14 +109,14 @@ which should be merged by the Nixpkgs commit delegators to reconcile the mismatc
 ### Semi-automatic retirement
 
 Every day, [a GitHub Action workflow](./.github/workflows/retire.yml) runs
-to check if any Nixpkgs committers have not used their commit access within the last year,
+to check if any Nixpkgs committers have not used their commit access within the last six months,
 in which case an automated PR is created to remove them from the member list.
 
 The PR will ping the user and inform them that it will by default be merged and implemented in one month.
 If the PR is still open one month later,
 an automated comment will be posted with the next steps for the Nixpkgs commit delegators.
 
-If the PR is closed, retirement is delayed by another year.
+If the PR is closed, retirement is delayed by another six months.
 
 ### Setup
 
