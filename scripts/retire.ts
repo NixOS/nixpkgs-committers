@@ -209,7 +209,7 @@ export default async function retire({ github, options }: {
 
     // If the commit bit was received after the cutoff date, don't retire in any case
     if (fileCommitEpoch > newCutoff) {
-      log(`${login} became a committer less than 1 year ago, skipping retirement check`);
+      log(`${login} became a committer less than ${config.newCutoffSpec}, skipping retirement check`);
       if (cache[login]) {
         newCache[login] = { ...cache[login], firstInactive: 0 };
       }
@@ -226,7 +226,7 @@ export default async function retire({ github, options }: {
       // no need to bother the unreliable /commits endpoint
     } else {
       queried = true;
-      // For an open PR the comment lists activity from the whole past year;
+      // For an open PR the comment lists activity from the whole past `activityCutoff`;
       // otherwise only merges newer than the cached one are of interest
       const sinceEpoch =
         prState === 'open' ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
@@ -317,13 +317,13 @@ export default async function retire({ github, options }: {
         const bodyLines: string[] = [];
         if (activityLines.length > 0) {
           bodyLines.push(
-            `One month has passed, and @${login} has been active again:`,
+            `The allotted time has passed, and @${login} has been active again:`,
             ...activityLines.map((a) => a.line),
             '',
             'If still appropriate, this PR may be merged and implemented by:',
           );
         } else {
-          bodyLines.push('One month has passed, so this PR should now be merged and implemented by:');
+          bodyLines.push('The allotted time has passed, so this PR should now be merged and implemented by:');
         }
         bodyLines.push(
           `- Adding @${login} to the [Retired Nixpkgs Contributors team](https://github.com/orgs/NixOS/teams/retired-nixpkgs-contributors)`,
@@ -354,8 +354,8 @@ export default async function retire({ github, options }: {
         log(`${login} has a retirement PR pending`);
       }
     } else if (activityLines.length > 0 || mergeEpoch > activityCutoff) {
-      // Merges returned by the query are always newer than yearAgo (the since parameter),
-      // so activityLines being non-empty implies mergeEpoch > yearAgo.
+      // Merges returned by the query are always newer than activityCutoff (the since parameter),
+      // so activityLines being non-empty implies mergeEpoch > activityCutoff.
       if (activityLines.length > 0) {
         log(`${login} is active with ${activityLines.length} new merges`);
       } else {
@@ -378,9 +378,9 @@ export default async function retire({ github, options }: {
           `git push -f -u origin ${branchName}`,
         );
         const body = [
-          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access in the past year.`,
+          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access in the past ${config.activityCutoffSpec}.`,
           '',
-          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented in one month.`,
+          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${(new Date(activityCutoff)).toUTCString()}.`,
           '',
           '> [!NOTE]',
           '> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs.' +
