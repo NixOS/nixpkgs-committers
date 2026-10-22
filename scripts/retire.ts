@@ -215,7 +215,7 @@ export default async function retire({ github, options }: {
 
     // If the commit bit was received after the cutoff date, don't retire in any case
     if (fileCommitEpoch > newCutoff) {
-      log(`${login} became a committer less than ${config.newCutoffSpec}, skipping retirement check`);
+      log(`${login} became a committer after ${isoDate(newCutoff)}, skipping retirement check`);
       if (cache[login]) {
         newCache[login] = { ...cache[login], firstInactive: 0 };
       }
@@ -232,7 +232,7 @@ export default async function retire({ github, options }: {
       // no need to bother the unreliable /commits endpoint
     } else {
       queried = true;
-      // For an open PR the comment lists activity from the whole past `activityCutoff`;
+      // For an open PR the comment lists all activity since activityCutoff;
       // otherwise only merges newer than the cached one are of interest
       const sinceEpoch =
         prState === 'open' ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
@@ -384,7 +384,7 @@ export default async function retire({ github, options }: {
           `git push -f -u origin ${branchName}`,
         );
         const body = [
-          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access in the past ${config.activityCutoffSpec}.`,
+          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access since ${isoDate(activityCutoff)}.`,
           '',
           `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${isoDate(noticeDeadline)}.`,
           '',
