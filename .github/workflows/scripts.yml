@@ -1,0 +1,40 @@
+name: scripts
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/scripts.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/scripts.yml'
+
+permissions: {}
+
+# An explicit `shell: bash` runs steps with `-eo pipefail`, not just `-e`
+defaults:
+  run:
+    shell: bash
+    working-directory: scripts
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Fetch source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          # Matches the node24 runtime of actions/github-script
+          node-version: 24
+      # scripts/.npmrc sets package-lock-only for local use, where shell.nix provides node_modules
+      - run: npm ci --package-lock-only=false
+      - run: npm test
