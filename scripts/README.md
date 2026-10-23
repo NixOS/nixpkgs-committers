@@ -91,7 +91,7 @@ This script has external effects and as such needs a bit more care when testing.
 
 ### Setup (important!)
 
-To avoid other users getting pings, ensure that the `members-test` directory contains only simulated new users and your own user (simulated to have been added over a year ago), then commit and push it for testing:
+To avoid other users getting pings, ensure that the `members-test` directory contains only simulated new users and your own user (simulated to have been added over six months ago), then commit and push it for testing:
 
 ```bash
 me=$(gh api /user --jq .login)
