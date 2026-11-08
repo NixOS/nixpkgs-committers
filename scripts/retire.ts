@@ -390,7 +390,7 @@ export default async function retire({ github, options }: {
           '',
           '> [!NOTE]',
           '> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs.' +
-            ' It is only needed for things that require `write` permissions to Nixpkgs, such as merging PRs.',
+            ' It is only needed for things that require `write` permissions to Nixpkgs, such as merging PRs which are not [merge bot eligible](https://github.com/NixOS/nixpkgs/blob/master/ci/README.md#nixpkgs-merge-bot).',
         ].join('\n');
         const pr = await effect(
           () =>
