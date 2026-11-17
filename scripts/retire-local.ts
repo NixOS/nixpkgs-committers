@@ -10,6 +10,8 @@ function usage(): never {
   console.error(`Usage: ${process.argv[1]} ORG ACTIVITY_REPO MEMBER_REPO DIR`);
   console.error('');
   console.error('Optionally set CACHE_FILE to a path for persisting activity observations between runs.');
+  console.error('Optionally set MAINTAINERS_FILE to the JSON of Nixpkgs\' maintainer-list.nix to check maintainer entries,');
+  console.error('together with TEAM to the slug of the GitHub team whose members are in DIR.');
   console.error('Set PROD=1 to actually perform side effects.');
   process.exit(1);
 }
@@ -31,6 +33,8 @@ retire({
     memberRepo,
     dir,
     cacheFile: process.env.CACHE_FILE,
+    maintainersFile: process.env.MAINTAINERS_FILE,
+    team: process.env.TEAM,
     prod: Boolean(process.env.PROD),
   },
 }).catch((err) => {
