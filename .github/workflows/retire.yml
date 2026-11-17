@@ -48,6 +48,19 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           # Fetch full history to determine when committers were added
           fetch-depth: 0
+      - name: Fetch Nixpkgs maintainer list
+        uses: actions/checkout@v7
+        with:
+          repository: NixOS/nixpkgs
+          path: .nixpkgs
+          sparse-checkout: maintainers/maintainer-list.nix
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - name: Convert Nixpkgs maintainer list to JSON
+        run: |
+          nix-instantiate --eval --strict --json .nixpkgs/maintainers/maintainer-list.nix \
+            > "$RUNNER_TEMP/maintainers.json"
       - name: Restore activity cache
         uses: actions/github-script@v9
         with:
@@ -75,6 +88,8 @@ jobs:
                 memberRepo: 'nixpkgs-committers',
                 dir: 'members',
                 cacheFile: '.cache/retire-cache.json',
+                maintainersFile: `${process.env.RUNNER_TEMP}/maintainers.json`,
+                team: 'nixpkgs-committers',
                 prod: true,
               },
             });
