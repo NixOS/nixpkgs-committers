@@ -18,6 +18,13 @@ export interface RetireOptions {
   memberRepo: string;
   dir: string;
   cacheFile?: string;
+  // Nixpkgs' maintainers/maintainer-list.nix as JSON. Generate this with
+  // `nix-instantiate --eval --strict --json maintainers/maintainer-list.nix`.
+  // Committers without an entry get retired. The check is skipped when unset.
+  maintainersFile?: string;
+  // The GitHub team whose members are the committers in `dir`,
+  // used to get their GitHub IDs for the maintainer entry check.
+  team?: string;
   prod: boolean;
 }
 
@@ -25,6 +32,23 @@ interface CachedActivity {
   mergeEpoch?: number;
   mergePr?: string;
   firstInactive?: number;
+}
+
+const maintainerListUrl = 'https://github.com/NixOS/nixpkgs/blob/master/maintainers/maintainer-list.nix';
+const becomeMaintainerUrl = 'https://github.com/NixOS/nixpkgs/tree/master/maintainers#how-to-become-a-maintainer';
+const maintainerList = `[Nixpkgs maintainer list](${maintainerListUrl})`;
+
+// Why a retirement PR was opened, recorded as a hidden marker in the PR body
+type Reason = 'inactivity' | 'maintainer-entry';
+const reasonMarker = (reason: Reason) => `<!-- retirement-reason: ${reason} -->`;
+
+// Retirement PRs can be opened for several reasons, and the rules differ based on the reason.
+function prReasons(body: string | null): Reason[] {
+  const reasons = [...(body ?? '').matchAll(/<!-- retirement-reason: (inactivity|maintainer-entry) -->/g)]
+    .map((m) => m[1] as Reason);
+
+  // PRs opened before reasons were recorded are all about inactivity
+  return reasons.length > 0 ? reasons : ['inactivity'];
 }
 
 // Parse a small subset of GNU `date --date` expressions (in UTC), enough for
@@ -86,6 +110,8 @@ export default async function retire({ github, options }: {
     memberRepo,
     dir,
     cacheFile,
+    maintainersFile,
+    team,
     prod,
   } = options;
 
@@ -166,6 +192,50 @@ export default async function retire({ github, options }: {
   }
   const newCache: Record<string, CachedActivity> = {};
 
+  // GitHub IDs with an entry in the Nixpkgs maintainer list
+  let maintainerIds: Set<number> | undefined;
+  // GitHub IDs of the team members, by lowercased login
+  let committerIds: Map<string, number> | undefined;
+  if (maintainersFile) {
+    if (!team) {
+      throw new Error('The maintainer entry check needs the team option to be set');
+    }
+    const list: Record<string, { githubId?: number }> = JSON.parse(
+      fs.readFileSync(maintainersFile, 'utf8'),
+    );
+    maintainerIds = new Set();
+    for (const entry of Object.values(list)) {
+      if (entry.githubId) {
+        maintainerIds.add(entry.githubId);
+      }
+    }
+    log(`Loaded ${maintainerIds.size} maintainer entries from ${maintainersFile}`);
+
+    const members = await trace(
+      () => github.paginate(github.rest.teams.listMembersInOrg, { org, team_slug: team, per_page: 100 }),
+      `GET /orgs/${org}/teams/${team}/members`,
+    );
+    committerIds = new Map(members.map((member) => [member.login.toLowerCase(), member.id]));
+  } else {
+    log('No maintainers file given, skipping the maintainer entry check');
+  }
+
+  // Whether somebody has a maintainer entry, or undefined if that isn't being checked.
+  // Entries match by GitHub ID only, like Nixpkgs' maintainers/computed-team-list.nix,
+  // since the `github` handle in an entry can be stale after a rename.
+  const hasMaintainerEntry = (login: string): boolean | undefined => {
+    if (!maintainerIds || !committerIds) {
+      return undefined;
+    }
+    const id = committerIds.get(login.toLowerCase());
+    if (id === undefined) {
+      // Somebody renamed or removed since the last sync shouldn't be retired for this
+      log(`${login} is not in the ${org}/${team} team, skipping the maintainer entry check`);
+      return undefined;
+    }
+    return maintainerIds.has(id);
+  };
+
   const logins = fs.readdirSync(dir).sort();
   for (const login of logins) {
     // Figure out when this person received the commit bit
@@ -185,9 +255,9 @@ export default async function retire({ github, options }: {
       ),
     );
 
-    // Latest retirement PR, whether draft, open or closed
+    // Retirement PRs, newest first, whether draft, open or closed
     const branchName = `retire-${login}`;
-    const prInfo = (
+    const prs = (
       await trace(
         () =>
           github.rest.pulls.list({
@@ -195,39 +265,59 @@ export default async function retire({ github, options }: {
             repo: memberRepo,
             state: 'all',
             head: `${org}:${branchName}`,
-            per_page: 1,
+            per_page: 100,
           }),
         `GET /repos/${org}/${memberRepo}/pulls?head=${org}:${branchName}`,
       )
-    ).data[0];
-    const prState = prInfo ? prInfo.state : 'none';
+    ).data;
+    const openPr = prs.find((pr) => pr.state === 'open');
 
-    if (prInfo?.state === 'closed' && prInfo.closed_at && Date.parse(prInfo.closed_at) / 1000 > closeCutoff) {
-      log(`${login} had a retirement PR that was closed recently, skipping retirement check`);
-      // Keep the cached merge so the #100 protection survives the skip,
-      // but drop the inactivity observation: it isn't being confirmed while skipped,
-      // and a stale one would let a single empty response open a PR once the skip ends
-      if (cache[login]) {
-        newCache[login] = { ...cache[login], firstInactive: 0 };
-      }
-      continue;
+    // A recently closed PR only skips the checks for the reasons it was opened for
+    const recentlyClosed = (reason: Reason) =>
+      prs.some(
+        (pr) =>
+          pr.state === 'closed' &&
+          pr.closed_at &&
+          Date.parse(pr.closed_at) / 1000 > closeCutoff &&
+          prReasons(pr.body).includes(reason),
+      );
+
+    let checkInactivity = true;
+    if (!openPr && recentlyClosed('inactivity')) {
+      log(`${login} had an inactivity retirement PR that was closed recently, skipping inactivity check`);
+      checkInactivity = false;
+    } else if (fileCommitEpoch > newCutoff) {
+      // If the commit bit was received after the cutoff date, don't retire for inactivity
+      log(`${login} became a committer after ${isoDate(newCutoff)}, skipping inactivity check`);
+      checkInactivity = false;
     }
 
-    // If the commit bit was received after the cutoff date, don't retire in any case
-    if (fileCommitEpoch > newCutoff) {
-      log(`${login} became a committer after ${isoDate(newCutoff)}, skipping retirement check`);
-      if (cache[login]) {
-        newCache[login] = { ...cache[login], firstInactive: 0 };
+    // Unlike inactivity, a maintainer entry is required from the start
+    const hasEntry = hasMaintainerEntry(login);
+    let missingEntry = false;
+    if (hasEntry === false) {
+      if (!openPr && recentlyClosed('maintainer-entry')) {
+        log(`${login} has no maintainer entry, but such a retirement PR was closed recently, skipping`);
+      } else {
+        log(`${login} has no maintainer entry`);
+        missingEntry = true;
       }
-      continue;
     }
 
     // What previous runs observed about this person's merge activity
     let { mergeEpoch = 0, mergePr = '', firstInactive = 0 } = cache[login] ?? {};
+    if (!checkInactivity) {
+      // Keep the cached merge so the #100 protection survives the skip,
+      // but drop the inactivity observation: it isn't being confirmed while skipped,
+      // and a stale one would let a single empty response open a PR once the skip ends
+      firstInactive = 0;
+    }
 
     const activityLines: { epoch: number; pr: string; line: string }[] = [];
     let queried = false;
-    if (prState !== 'open' && mergeEpoch > queryCutoff) {
+    if (!checkInactivity) {
+      // Activity is irrelevant
+    } else if (!openPr && mergeEpoch > queryCutoff) {
       // Recent cached activity already rules out retirement,
       // no need to bother the unreliable /commits endpoint
     } else {
@@ -235,7 +325,7 @@ export default async function retire({ github, options }: {
       // For an open PR the comment lists all activity since activityCutoff;
       // otherwise only merges newer than the cached one are of interest
       const sinceEpoch =
-        prState === 'open' ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
+        openPr ? activityCutoff : Math.max(activityCutoff, mergeEpoch + 1);
       const commits = (
         await trace(
           () =>
@@ -293,7 +383,29 @@ export default async function retire({ github, options }: {
       );
     }
 
-    if (prInfo?.state === 'open') {
+    const reasons: Reason[] = [];
+    if (!openPr && checkInactivity) {
+      if (activityLines.length > 0 || mergeEpoch > activityCutoff) {
+        // Merges returned by the query are always newer than activityCutoff (the since parameter),
+        // so activityLines being non-empty implies mergeEpoch > activityCutoff.
+        if (activityLines.length > 0) {
+          log(`${login} is active with ${activityLines.length} new merges`);
+        } else {
+          log(`${login} is active, last known merge ${mergePr} on ${isoSeconds(mergeEpoch)} (cached)`);
+        }
+      } else if (firstInactive > confirmCutoff) {
+        log(`${login} appears inactive since ${isoSeconds(firstInactive)}, continuing to check before opening a PR`);
+      } else {
+        log(`${login} has become inactive`);
+        reasons.push('inactivity');
+      }
+    }
+    if (!openPr && missingEntry) {
+      reasons.push('maintainer-entry');
+    }
+
+    if (openPr) {
+      const prReasonList = prReasons(openPr.body);
       if (activityLines.length === 0 && mergeEpoch > activityCutoff) {
         // The query came back empty even though the cache proves activity
         // (issue #100), so reconstruct the activity list from the cache
@@ -304,9 +416,9 @@ export default async function retire({ github, options }: {
         });
       }
       // If there is an open PR already
-      const prNumber = prInfo.number;
-      const epochCreatedAt = Date.parse(prInfo.created_at) / 1000;
-      if (prInfo.draft && epochCreatedAt < noticeCutoff) {
+      const prNumber = openPr.number;
+      const epochCreatedAt = Date.parse(openPr.created_at) / 1000;
+      if (openPr.draft && epochCreatedAt < noticeCutoff) {
         log(`${login} has a retirement PR due, unmarking PR as draft and commenting with next steps`);
         await effect(
           () =>
@@ -316,36 +428,49 @@ export default async function retire({ github, options }: {
                   pullRequest { number }
                 }
               }`,
-              { id: prInfo.node_id },
+              { id: openPr.node_id },
             ),
           `markPullRequestReadyForReview ${org}/${memberRepo}#${prNumber}`,
         );
-        const bodyLines: string[] = [];
-        if (activityLines.length > 0) {
-          bodyLines.push(
-            `The allotted time has passed, and @${login} has been active again:`,
-            ...activityLines.map((a) => a.line),
-            '',
-            'If still appropriate, this PR may be merged and implemented by:',
-          );
-        } else {
-          bodyLines.push('The allotted time has passed, so this PR should now be merged and implemented by:');
+        // Which of the reasons for this PR no longer apply
+        const resolved = {
+          inactivity: activityLines.length > 0,
+          'maintainer-entry': hasEntry === true,
+        };
+        const bodyLines = ['The allotted time has passed.', ''];
+        if (prReasonList.includes('inactivity') && resolved.inactivity) {
+          bodyLines.push(`@${login} has been active again:`, ...activityLines.map((a) => a.line), '');
         }
-        bodyLines.push(
-          `- Adding @${login} to the [Retired Nixpkgs Contributors team](https://github.com/orgs/NixOS/teams/retired-nixpkgs-contributors)`,
-          '  ```sh',
-          '  gh api \\',
-          '    --method PUT \\',
-          `    '/orgs/NixOS/teams/retired-nixpkgs-contributors/memberships/${login}' \\`,
-          '    -f role=member',
-          '  ```',
-          `- Removing @${login} from the [Nixpkgs Committers team](https://github.com/orgs/NixOS/teams/nixpkgs-committers)`,
-          '  ```sh',
-          '  gh api \\',
-          '    --method DELETE \\',
-          `    '/orgs/NixOS/teams/nixpkgs-committers/memberships/${login}'`,
-          '  ```',
-        );
+        if (hasEntry === true && prReasonList.includes('maintainer-entry')) {
+          bodyLines.push(`@${login} now has an entry in the ${maintainerList}.`, '');
+        } else if (hasEntry === false) {
+          bodyLines.push(`@${login} has no entry in the ${maintainerList}.`, '');
+        }
+        if (prReasonList.every((reason) => reason === 'maintainer-entry' && resolved[reason])) {
+          // Having an entry now is all that was asked for, nothing left to judge
+          bodyLines.push('This PR can be closed.');
+        } else {
+          if (prReasonList.some((reason) => resolved[reason])) {
+            bodyLines.push('If still appropriate, this PR may be merged and implemented by:');
+          } else {
+            bodyLines.push('This PR should now be merged and implemented by:');
+          }
+          bodyLines.push(
+            `- Adding @${login} to the [Retired Nixpkgs Contributors team](https://github.com/orgs/NixOS/teams/retired-nixpkgs-contributors)`,
+            '  ```sh',
+            '  gh api \\',
+            '    --method PUT \\',
+            `    '/orgs/NixOS/teams/retired-nixpkgs-contributors/memberships/${login}' \\`,
+            '    -f role=member',
+            '  ```',
+            `- Removing @${login} from the [Nixpkgs Committers team](https://github.com/orgs/NixOS/teams/nixpkgs-committers)`,
+            '  ```sh',
+            '  gh api \\',
+            '    --method DELETE \\',
+            `    '/orgs/NixOS/teams/nixpkgs-committers/memberships/${login}'`,
+            '  ```',
+          );
+        }
         await effect(
           () =>
             github.rest.issues.createComment({
@@ -359,19 +484,9 @@ export default async function retire({ github, options }: {
       } else {
         log(`${login} has a retirement PR pending`);
       }
-    } else if (activityLines.length > 0 || mergeEpoch > activityCutoff) {
-      // Merges returned by the query are always newer than activityCutoff (the since parameter),
-      // so activityLines being non-empty implies mergeEpoch > activityCutoff.
-      if (activityLines.length > 0) {
-        log(`${login} is active with ${activityLines.length} new merges`);
-      } else {
-        log(`${login} is active, last known merge ${mergePr} on ${isoSeconds(mergeEpoch)} (cached)`);
-      }
-    } else if (firstInactive > confirmCutoff) {
-      log(`${login} appears inactive since ${isoSeconds(firstInactive)}, continuing to check before opening a PR`);
-    } else {
-      log(`${login} has become inactive, opening a PR`);
-      // If there is no PR yet, but they have become inactive
+    } else if (reasons.length > 0) {
+      log(`Opening a retirement PR for ${login} (${reasons.join(', ')})`);
+      // If there is no PR yet, but there are reasons for retirement
       try {
         trace(() => git('switch', '-C', branchName), `git switch -C ${branchName}`);
         trace(() => git('rm', login), `git rm ${login}`);
@@ -383,14 +498,24 @@ export default async function retire({ github, options }: {
           () => git('push', '-f', '-u', 'origin', branchName),
           `git push -f -u origin ${branchName}`,
         );
+        const because = reasons.map((reason) => ({
+          inactivity: `they have not used their commit access since ${isoDate(activityCutoff)}`,
+          'maintainer-entry': `they have no entry in the ${maintainerList}, which every committer needs`,
+        })[reason]);
+        const asks = reasons.map((reason) => ({
+          inactivity: 'make a comment stating why you believe your commit access should be kept',
+          'maintainer-entry': `add an entry for yourself to the maintainer list ([how to](${becomeMaintainerUrl}))`,
+        })[reason]);
         const body = [
-          `This is an automated PR to retire @${login} as a Nixpkgs committer because they have not used their commit access since ${isoDate(activityCutoff)}.`,
+          `This is an automated PR to retire @${login} as a Nixpkgs committer because ${because.join(', and ')}.`,
           '',
-          `@${login}: You can make a comment stating why you believe your commit access should be kept. Otherwise, this PR will be merged and implemented after ${isoDate(noticeDeadline)}.`,
+          `@${login}: You can ${asks.join(', and ')}. Otherwise, this PR will be merged and implemented after ${isoDate(noticeDeadline)}.`,
           '',
           '> [!NOTE]',
           '> Commit access is not required for most forms of contributing, including being a maintainer and reviewing PRs.' +
             ' It is only needed for things that require `write` permissions to Nixpkgs, such as merging PRs which are not [merge bot eligible](https://github.com/NixOS/nixpkgs/blob/master/ci/README.md#nixpkgs-merge-bot).',
+          '',
+          ...reasons.map(reasonMarker),
         ].join('\n');
         const pr = await effect(
           () =>
