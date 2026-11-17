@@ -179,4 +179,46 @@ The production value of `confirmCutoffSpec` is `7 days ago`, which together with
 
    Check that no other PR is opened.
 
+### Maintainer entry check
+
+Committers without an entry in Nixpkgs' `maintainers/maintainer-list.nix` get a retirement PR too.
+This check only runs when the `MAINTAINERS_FILE` environment variable points to that list as JSON and the `TEAM` environment variable contains the name of the relevant GitHub team.
+In CI, the JSON is produced by:
+
+```bash
+nix-instantiate --eval --strict --json maintainers/maintainer-list.nix > maintainers.json
+```
+
+To test it, use small lists instead:
+
+1. Close any retirement PR for your user from the previous sequence, then simulate CI running with you in the maintainer list:
+   ```bash
+   gh api /user --jq '{me: {github: .login, githubId: .id}}' > .tmp-maintainers.json
+   MAINTAINERS_FILE=.tmp-maintainers.json TEAM=actors scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
+   ```
+
+   Check that no PR would be opened, and that `new-committer-1` and `new-committer-2` are skipped for not being in the `actors` team.
+1. Simulate an entry with a stale handle, which should still match by GitHub ID:
+   ```bash
+   gh api /user --jq '{me: {github: "old-name", githubId: .id}}' > .tmp-maintainers.json
+   MAINTAINERS_FILE=.tmp-maintainers.json TEAM=actors scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
+   ```
+
+   Check that no PR would be opened.
+1. Simulate your entry missing, despite you being active:
+   ```bash
+   echo '{}' > .tmp-maintainers.json
+   PROD=1 MAINTAINERS_FILE=.tmp-maintainers.json TEAM=actors scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
+   ```
+
+   Check that it created a PR that only asks you to add a maintainer entry, because the PR you closed earlier only skips the inactivity check.
+1. Set `noticeCutoffSpec` to `now`, add yourself back and run it again to simulate the entry being added in time:
+   ```bash
+   gh api /user --jq '{me: {github: .login, githubId: .id}}' > .tmp-maintainers.json
+   PROD=1 MAINTAINERS_FILE=.tmp-maintainers.json TEAM=actors scripts/retire-local.ts nixos-test-org active nixpkgs-committers members-test
+   rm .tmp-maintainers.json
+   ```
+
+   Check that it undrafted the PR with a comment saying it can be closed.
+
 Restore the production date specs in `retire-config.ts` after testing.
